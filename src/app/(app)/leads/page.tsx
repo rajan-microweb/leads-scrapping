@@ -38,6 +38,9 @@ export default function LeadsPage() {
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [uploadSuccess, setUploadSuccess] = useState<string | null>(null)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [currentPage, setCurrentPage] = useState(1)
+
+  const pageSize = 10
 
   useEffect(() => {
     let isMounted = true
@@ -84,6 +87,25 @@ export default function LeadsPage() {
       isMounted = false
     }
   }, [])
+
+  // Reset to first page whenever the list changes
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [leadFiles.length])
+
+  const totalPages =
+    leadFiles.length === 0 ? 1 : Math.ceil(leadFiles.length / pageSize)
+
+  const paginatedLeads = leadFiles.slice(
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize,
+  )
+
+  const getFileType = (fileName: string) => {
+    const dotIndex = fileName.lastIndexOf(".")
+    if (dotIndex === -1 || dotIndex === fileName.length - 1) return "Unknown"
+    return fileName.substring(dotIndex + 1).toUpperCase()
+  }
 
   return (
     <div className="space-y-6">
@@ -322,24 +344,53 @@ export default function LeadsPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>File Name</TableHead>
+                  <TableHead>Type</TableHead>
                   <TableHead>Uploaded At</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {leadFiles.map((file) => (
+                {paginatedLeads.map((file) => (
                   <TableRow key={file.id}>
                     <TableCell className="font-medium">
                       {file.fileName}
                     </TableCell>
+                    <TableCell>{getFileType(file.fileName)}</TableCell>
                     <TableCell>
                       {new Date(file.uploadedAt).toLocaleString()}
                     </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
-              <TableCaption>
-                Showing {leadFiles.length}{" "}
-                {leadFiles.length === 1 ? "file" : "files"}.
+              <TableCaption className="flex items-center justify-between gap-4">
+                <span className="text-xs text-muted-foreground">
+                  Showing {leadFiles.length === 0 ? 0 : (currentPage - 1) * pageSize + 1}-
+                  {Math.min(currentPage * pageSize, leadFiles.length)} of{" "}
+                  {leadFiles.length}{" "}
+                  {leadFiles.length === 1 ? "file" : "files"}.
+                </span>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={currentPage === 1}
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  >
+                    Previous
+                  </Button>
+                  <span className="text-xs text-muted-foreground">
+                    Page {currentPage} of {totalPages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={currentPage === totalPages || leadFiles.length === 0}
+                    onClick={() =>
+                      setCurrentPage((p) => Math.min(totalPages, p + 1))
+                    }
+                  >
+                    Next
+                  </Button>
+                </div>
               </TableCaption>
             </Table>
           )}
