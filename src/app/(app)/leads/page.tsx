@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { Clock, FileSpreadsheet, UploadCloud } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -108,31 +109,35 @@ export default function LeadsPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Leads</h1>
-          <p className="text-sm text-muted-foreground">
-            Review and manage your uploaded lead files.
+    <div className="space-y-6 max-w-5xl mx-auto">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div className="space-y-1">
+          <h1 className="text-3xl font-semibold tracking-tight">Leads</h1>
+          <p className="text-sm text-muted-foreground max-w-xl">
+            Upload prospect lists in CSV or Excel format and keep track of every file
+            you&apos;ve processed through your workflow.
           </p>
         </div>
 
         <Dialog>
           <DialogTrigger asChild>
-            <Button>Upload Leads</Button>
+            <Button className="gap-2">
+              <UploadCloud className="h-4 w-4" />
+              Upload Leads
+            </Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Upload Leads</DialogTitle>
+              <DialogTitle>Upload leads file</DialogTitle>
               <DialogDescription>
-                Upload a leads file in CSV or Excel format. The file will be
-                processed by our automation workflow and only the file name will
-                be stored in your account.
+                Choose a CSV or Excel file containing your leads. The file is sent
+                securely to our processing workflow; only the file name is stored in
+                your account for reference.
               </DialogDescription>
             </DialogHeader>
 
             <form
-              className="space-y-4"
+              className="space-y-4 pt-2"
               onSubmit={async (e) => {
                 e.preventDefault()
 
@@ -321,23 +326,91 @@ export default function LeadsPage() {
         </Dialog>
       </div>
 
-      <Card>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Card className="border-dashed">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <span className="text-xs font-medium text-muted-foreground">
+              Total files
+            </span>
+            <FileSpreadsheet className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-semibold">{leadFiles.length}</div>
+            <p className="text-xs text-muted-foreground">
+              {leadFiles.length === 1 ? "Single upload so far" : "All uploaded lead files"}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-dashed">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <span className="text-xs font-medium text-muted-foreground">
+              Last upload
+            </span>
+            <Clock className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-sm font-medium">
+              {leadFiles.length === 0
+                ? "No uploads yet"
+                : new Date(leadFiles[0].uploadedAt).toLocaleString()}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Most recent file you&apos;ve added
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-dashed">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <span className="text-xs font-medium text-muted-foreground">
+              Table view
+            </span>
+          </CardHeader>
+          <CardContent>
+            <div className="text-sm font-medium">
+              Page {currentPage} of {totalPages}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Showing up to {pageSize} files per page
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card className="border border-border/60 shadow-sm">
         <CardHeader>
-          <CardTitle>Lead Files</CardTitle>
+          <CardTitle className="flex items-center justify-between">
+            <span>Lead files</span>
+            <span className="text-xs font-normal text-muted-foreground">
+              Keep your uploads organized and easy to scan.
+            </span>
+          </CardTitle>
         </CardHeader>
         <CardContent>
           {isLoading ? (
-            <div className="flex h-24 items-center justify-center text-sm text-muted-foreground">
-              Loading lead files...
+            <div className="flex h-32 flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
+              <span>Loading lead files...</span>
             </div>
           ) : error ? (
             <div className="flex h-24 items-center justify-center text-sm text-red-600">
               {error}
             </div>
           ) : leadFiles.length === 0 ? (
-            <div className="flex h-24 flex-col items-center justify-center text-sm text-muted-foreground">
-              <p>No lead files uploaded yet.</p>
-              <p>Use the &quot;Upload Leads&quot; button to add your first file.</p>
+            <div className="flex h-40 flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
+                <UploadCloud className="h-6 w-6 text-muted-foreground" />
+              </div>
+              <div className="text-center space-y-1">
+                <p className="font-medium text-foreground">
+                  No lead files uploaded yet
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Start by uploading a CSV or Excel file using the &quot;Upload
+                  Leads&quot; button above.
+                </p>
+              </div>
             </div>
           ) : (
             <Table>
@@ -354,7 +427,11 @@ export default function LeadsPage() {
                     <TableCell className="font-medium">
                       {file.fileName}
                     </TableCell>
-                    <TableCell>{getFileType(file.fileName)}</TableCell>
+                    <TableCell>
+                      <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                        {getFileType(file.fileName)}
+                      </span>
+                    </TableCell>
                     <TableCell>
                       {new Date(file.uploadedAt).toLocaleString()}
                     </TableCell>
