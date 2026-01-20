@@ -1,10 +1,10 @@
 import Link from "next/link"
 import { auth, signOut } from "@/lib/auth"
 import { redirect } from "next/navigation"
-import { Button } from "@/components/ui/button"
 import { prisma } from "@/lib/prisma"
 import { AdminSidebar } from "@/components/admin-sidebar"
-import { SidebarToggle } from "@/components/sidebar-toggle"
+import { Button } from "@/components/ui/button"
+import { SidebarToggle } from "@/components/layout/SidebarToggle"
 
 export default async function AppLayout({
   children,

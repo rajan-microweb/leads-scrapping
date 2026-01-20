@@ -51,6 +51,7 @@ export function AdminSidebar({ user, avatarUrl }: SidebarProps) {
   const navItems = [
     { href: "/dashboard", label: "Dashboard" },
     { href: "/profile", label: "Profile" },
+    { href: "/leads", label: "Leads" },
   ]
 
   return (
