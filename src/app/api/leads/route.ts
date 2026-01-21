@@ -17,6 +17,11 @@ export async function GET() {
         id: true,
         fileName: true,
         uploadedAt: true,
+        signature: {
+          select: {
+            name: true,
+          },
+        },
       },
     })
 
@@ -25,6 +30,7 @@ export async function GET() {
         id: file.id,
         fileName: file.fileName,
         uploadedAt: file.uploadedAt,
+        signatureName: file.signature?.name ?? null,
       })),
       { status: 200 },
     )

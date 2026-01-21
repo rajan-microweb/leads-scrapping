@@ -49,11 +49,13 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           return null
         }
 
+        // Only return non-sensitive fields to NextAuth; the rest stays in the database
         return {
           id: user.id,
           email: user.email,
           name: user.name,
           image: user.image,
+          role: user.role,
         }
       },
     }),
@@ -61,15 +63,30 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        token.id = user.id
+        token.id = (user as any).id
+        if ("role" in user && (user as any).role) {
+          token.role = (user as any).role
+        }
+      }
+      // Default role to CLIENT if not already set
+      if (!token.role) {
+        token.role = "CLIENT"
       }
       return token
     },
     async session({ session, token }) {
       if (session.user) {
         session.user.id = token.id as string
+        // propagate role into session for easy access
+        session.user.role = (token.role as "ADMIN" | "CLIENT") ?? "CLIENT"
       }
       return session
     },
   },
 })
+
+// Simple reusable helper to check if the current authenticated user is an admin
+export async function isAdmin() {
+  const session = await auth()
+  return session?.user?.role === "ADMIN"
+}

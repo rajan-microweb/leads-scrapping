@@ -28,6 +28,38 @@ const bodySchema = z.object({
   company_intelligence: companyIntelligenceSchema,
 })
 
+export async function GET() {
+  try {
+    const session = await auth()
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: {
+        id: true,
+        name: true,
+        fullName: true,
+        email: true,
+        phone: true,
+        jobTitle: true,
+        country: true,
+        timezone: true,
+        image: true,
+        avatarUrl: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    })
+
+    return NextResponse.json(user ?? null, { status: 200 })
+  } catch (error) {
+    console.error("profile GET error:", error)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const session = await auth()

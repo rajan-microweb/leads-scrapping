@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Clock, FileSpreadsheet, UploadCloud } from "lucide-react"
+import { Clock, FileSpreadsheet, UploadCloud, Plus } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -21,12 +21,20 @@ import {
   TableRow,
   TableCaption,
 } from "@/components/ui/table"
+import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 
 type LeadFile = {
   id: string
   fileName: string
   uploadedAt: string
+  signatureName?: string | null
+}
+
+type Signature = {
+  id: string
+  name: string
+  content: string
 }
 
 const ALLOWED_EXTENSIONS = [".xlsx", ".xls", ".csv"]
@@ -39,7 +47,12 @@ export default function LeadsPage() {
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [uploadSuccess, setUploadSuccess] = useState<string | null>(null)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [fileInputKey, setFileInputKey] = useState(0)
   const [currentPage, setCurrentPage] = useState(1)
+  const [signatures, setSignatures] = useState<Signature[]>([])
+  const [signaturesLoading, setSignaturesLoading] = useState(true)
+  const [signaturesError, setSignaturesError] = useState<string | null>(null)
+  const [selectedSignatureId, setSelectedSignatureId] = useState<string>("")
 
   const pageSize = 10
 
@@ -89,6 +102,53 @@ export default function LeadsPage() {
     }
   }, [])
 
+  useEffect(() => {
+    let isMounted = true
+
+    const loadSignatures = async () => {
+      try {
+        setSignaturesLoading(true)
+        setSignaturesError(null)
+
+        const res = await fetch("/api/signatures")
+
+        if (!res.ok) {
+          // If user is unauthorized or another error occurs, just show a friendly message.
+          throw new Error(
+            res.status === 401
+              ? "You must be signed in to load signatures."
+              : "Failed to load signatures.",
+          )
+        }
+
+        const data = (await res.json()) as Signature[]
+
+        if (isMounted) {
+          setSignatures(data ?? [])
+        }
+      } catch (err) {
+        if (isMounted) {
+          setSignaturesError(
+            err instanceof Error
+              ? err.message
+              : "An unexpected error occurred while loading signatures.",
+          )
+          setSignatures([])
+        }
+      } finally {
+        if (isMounted) {
+          setSignaturesLoading(false)
+        }
+      }
+    }
+
+    void loadSignatures()
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
   // Reset to first page whenever the list changes
   useEffect(() => {
     setCurrentPage(1)
@@ -122,17 +182,18 @@ export default function LeadsPage() {
         <Dialog>
           <DialogTrigger asChild>
             <Button className="gap-2">
-              <UploadCloud className="h-4 w-4" />
-              Upload Leads
+              <Plus className="h-4 w-4" />
+              Create Leads
             </Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Upload leads file</DialogTitle>
+              <DialogTitle>Create leads</DialogTitle>
               <DialogDescription>
-                Choose a CSV or Excel file containing your leads. The file is sent
-                securely to our processing workflow; only the file name is stored in
-                your account for reference.
+                Choose a CSV or Excel file containing your leads and optionally
+                select an email signature to attach. The file is sent securely to our
+                processing workflow; only the file name and selected signature
+                reference are stored in your account for reference.
               </DialogDescription>
             </DialogHeader>
 
@@ -168,7 +229,47 @@ export default function LeadsPage() {
                   const formData = new FormData()
                   formData.append("file", selectedFile)
 
-                  // 1a. Load latest MyCompanyInfo for this user
+                  // We'll send structured objects to n8n under these keys:
+                  // - personalDetails
+                  // - companyDetails
+                  // - integrationDetails
+                  let personalDetails: any = null
+                  let companyDetails: any = null
+                  let integrationDetails: any = null
+
+                  // 1a. Load personal user details (profile)
+                  try {
+                    const profileRes = await fetch("/api/profile")
+                    if (profileRes.ok) {
+                      const userProfile: any = await profileRes.json()
+                      if (userProfile && !userProfile.error) {
+                        // Do not send image/avatar fields
+                        const { image, avatarUrl, ...rest } = userProfile ?? {}
+                        personalDetails = rest
+                      }
+                    }
+                  } catch {
+                    // If profile fails to load, continue without it
+                  }
+
+                  // 1b. Load integrations (connected platforms)
+                  try {
+                    const integrationsRes = await fetch("/api/integrations")
+                    if (integrationsRes.ok) {
+                      const integrations: any = await integrationsRes.json()
+                      if (integrations && !integrations.error) {
+                        // Send integrations as an array (even if it contains a single item),
+                        // matching the earlier n8n payload screenshot.
+                        integrationDetails = Array.isArray(integrations)
+                          ? integrations
+                          : []
+                      }
+                    }
+                  } catch {
+                    // If integrations fail to load, continue without them
+                  }
+
+                  // 1c. Load latest MyCompanyInfo for this user
                   try {
                     const companyInfoRes = await fetch("/api/my-company-info")
 
@@ -219,24 +320,41 @@ export default function LeadsPage() {
                           createdAt: rawCompanyInfo.createdAt,
                           updatedAt: rawCompanyInfo.updatedAt,
                         }
-
-                        // 1b. Append each company info field separately so n8n
-                        // receives a flat JSON structure in `body`
-                        Object.entries(companyInfo).forEach(([key, value]) => {
-                          if (value === null || value === undefined) return
-                          if (Array.isArray(value) || typeof value === "object") {
-                            formData.append(key, JSON.stringify(value))
-                          } else {
-                            formData.append(key, String(value))
-                          }
-                        })
+                        companyDetails = companyInfo
                       }
                     }
                   } catch {
                     // If company info fails to load, continue with file only
                   }
 
-                  // 1c. Send file + company info to n8n webhook
+                  // 1d. Attach selected signature details, if any
+                  let selectedSignature: Signature | null = null
+                  if (selectedSignatureId) {
+                    selectedSignature =
+                      signatures.find((sig) => sig.id === selectedSignatureId) ??
+                      null
+                  }
+
+                  // 1e. Append the details as JSON strings (the "earlier" n8n format you showed).
+                  // n8n will display these as text fields which you can parse downstream if needed.
+                  formData.append(
+                    "personalDetails",
+                    JSON.stringify(personalDetails ?? {}),
+                  )
+                  formData.append(
+                    "companyDetails",
+                    JSON.stringify(companyDetails ?? {}),
+                  )
+                  formData.append(
+                    "integrationDetails",
+                    JSON.stringify(integrationDetails ?? []),
+                  )
+                  formData.append(
+                    "signature",
+                    JSON.stringify(selectedSignature ?? {}),
+                  )
+
+                  // 1f. Send file + company info + user profile + integrations + signature to n8n webhook
                   const n8nResponse = await fetch(
                     "https://n8n.srv1248804.hstgr.cloud/webhook/get-leads",
                     {
@@ -249,13 +367,16 @@ export default function LeadsPage() {
                     throw new Error("Failed to upload file to processing service.")
                   }
 
-                  // 2. Save fileName via backend (no file storage)
+                  // 2. Save fileName via backend (no file storage) and associate selected signature reference
                   const saveResponse = await fetch("/api/lead-file", {
                     method: "POST",
                     headers: {
                       "Content-Type": "application/json",
                     },
-                    body: JSON.stringify({ fileName: selectedFile.name }),
+                    body: JSON.stringify({
+                      fileName: selectedFile.name,
+                      signatureId: selectedSignatureId || null,
+                    }),
                   })
 
                   if (!saveResponse.ok) {
@@ -268,9 +389,11 @@ export default function LeadsPage() {
                   const updatedLeads = (await saveResponse.json()) as LeadFile[]
                   setLeadFiles(updatedLeads)
 
-                  setUploadSuccess("Leads file uploaded successfully.")
+                  setUploadSuccess("File uploaded to n8n successfully.")
                   setSelectedFile(null)
-                  ;(e.currentTarget as HTMLFormElement).reset()
+                  setSelectedSignatureId("")
+                  // Reset file input so the user can re-upload (including the same file name)
+                  setFileInputKey((k) => k + 1)
                 } catch (err) {
                   setUploadError(
                     err instanceof Error
@@ -283,6 +406,46 @@ export default function LeadsPage() {
               }}
             >
               <div className="space-y-2">
+                <Label
+                  htmlFor="signature-select"
+                  className="text-sm font-medium text-foreground"
+                >
+                  Select signature
+                </Label>
+                <select
+                  id="signature-select"
+                  name="signature"
+                  className="block w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm outline-none ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  value={selectedSignatureId}
+                  onChange={(event) => {
+                    setSelectedSignatureId(event.target.value)
+                  }}
+                  disabled={signaturesLoading || !!signaturesError}
+                >
+                  {signaturesLoading ? (
+                    <option value="">Loading signatures...</option>
+                  ) : signaturesError ? (
+                    <option value="">Unable to load signatures</option>
+                  ) : signatures.length === 0 ? (
+                    <option value="">No signatures available</option>
+                  ) : (
+                    <>
+                      <option value="">No signature</option>
+                      {signatures.map((signature) => (
+                        <option key={signature.id} value={signature.id}>
+                          {signature.name}
+                        </option>
+                      ))}
+                    </>
+                  )}
+                </select>
+                <p className="text-xs text-muted-foreground">
+                  Choose an email signature to associate with this leads file. This
+                  is optional and can be managed from the Signatures page.
+                </p>
+              </div>
+
+              <div className="space-y-2">
                 <label
                   htmlFor="lead-file"
                   className="text-sm font-medium text-foreground"
@@ -290,11 +453,16 @@ export default function LeadsPage() {
                   Leads file
                 </label>
                 <input
+                  key={fileInputKey}
                   id="lead-file"
                   name="lead-file"
                   type="file"
                   accept=".xlsx,.xls,.csv"
                   className="block w-full text-sm text-muted-foreground file:mr-4 file:rounded-md file:border-0 file:bg-primary file:px-4 file:py-2 file:text-sm file:font-medium file:text-primary-foreground hover:file:bg-primary/90"
+                  onClick={(event) => {
+                    // Allow selecting the same file twice in a row by clearing the input first
+                    ;(event.currentTarget as HTMLInputElement).value = ""
+                  }}
                   onChange={(event) => {
                     const file = event.target.files?.[0] ?? null
                     setSelectedFile(file)
@@ -407,7 +575,7 @@ export default function LeadsPage() {
                   No lead files uploaded yet
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  Start by uploading a CSV or Excel file using the &quot;Upload
+                  Start by uploading a CSV or Excel file using the &quot;Create
                   Leads&quot; button above.
                 </p>
               </div>
@@ -418,6 +586,7 @@ export default function LeadsPage() {
                 <TableRow>
                   <TableHead>File Name</TableHead>
                   <TableHead>Type</TableHead>
+                  <TableHead>Signature</TableHead>
                   <TableHead>Uploaded At</TableHead>
                 </TableRow>
               </TableHeader>
@@ -430,6 +599,11 @@ export default function LeadsPage() {
                     <TableCell>
                       <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
                         {getFileType(file.fileName)}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <span className="text-xs text-muted-foreground">
+                        {file.signatureName || "No signature"}
                       </span>
                     </TableCell>
                     <TableCell>

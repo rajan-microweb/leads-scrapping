@@ -13,9 +13,10 @@ type SidebarProps = {
     email?: string | null
   }
   avatarUrl?: string | null
+  userRole?: "ADMIN" | "CLIENT"
 }
 
-export function AdminSidebar({ user, avatarUrl }: SidebarProps) {
+export function AdminSidebar({ user, avatarUrl, userRole = "CLIENT" }: SidebarProps) {
   const [isOpen, setIsOpen] = useState(true)
   const [isMobile, setIsMobile] = useState(false)
   const pathname = usePathname()
@@ -52,6 +53,10 @@ export function AdminSidebar({ user, avatarUrl }: SidebarProps) {
     { href: "/dashboard", label: "Dashboard" },
     { href: "/profile", label: "Profile" },
     { href: "/leads", label: "Leads" },
+    { href: "/integrations", label: "Integrations" },
+    { href: "/signatures", label: "Signatures" },
+    // Only show Users page to admins
+    ...(userRole === "ADMIN" ? [{ href: "/users", label: "Users" }] : []),
   ]
 
   return (

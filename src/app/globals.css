@@ -57,3 +57,57 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Ensure Radix Dialog overlay doesn't block CKEditor balloons */
+@layer components {
+  [data-radix-portal] [data-radix-dialog-overlay] {
+    pointer-events: auto;
+  }
+  
+  /* Allow clicks to pass through overlay where CKEditor balloons are (they're rendered at body level) */
+  [data-radix-dialog-overlay] ~ [class*="ck-balloon"] {
+    pointer-events: auto !important;
+  }
+}
+
+/* CKEditor global styles for a comfortable editor area inside modals */
+@layer components {
+  /* Signature editor wrapper: single bordered box for the whole editor */
+  .signature-editor-wrapper {
+    background-color: hsl(var(--background));
+    display: flex;
+    flex-direction: column;
+    /* We do not use CKEditor’s built‑in link balloon; only our own modal. */
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* Make the CKEditor instance fill the wrapper box */
+  .signature-editor-wrapper .ck-editor {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .signature-editor-wrapper .ck-editor__main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Editable area grows with the box but scrolls when needed */
+  .ck.ck-editor__editable_inline {
+    flex: 1;
+    min-height: 0;
+    max-height: none;
+    overflow-y: auto;
+  }
+
+  /* Hide CKEditor’s built‑in inline link balloon so users only see
+     our Outlook‑style modal when inserting/editing links. */
+  .signature-editor-wrapper .ck-link-form,
+  .signature-editor-wrapper .ck.ck-link-form,
+  .signature-editor-wrapper .ck.ck-balloon-panel .ck-link-form {
+    display: none !important;
+  }
+}

@@ -17,11 +17,38 @@ export async function POST(request: Request) {
     }
 
     const fileName = body.fileName.trim()
+    let signatureId: string | null = null
+
+    if (body.signatureId && typeof body.signatureId === "string") {
+      const rawSignatureId = body.signatureId.trim()
+
+      if (rawSignatureId) {
+        const signature = await prisma.signature.findFirst({
+          where: {
+            id: rawSignatureId,
+            userId: session.user.id,
+          },
+          select: {
+            id: true,
+          },
+        })
+
+        if (!signature) {
+          return NextResponse.json(
+            { error: "Invalid signature selected" },
+            { status: 400 },
+          )
+        }
+
+        signatureId = signature.id
+      }
+    }
 
     await prisma.leadFile.create({
       data: {
         userId: session.user.id,
         fileName,
+        ...(signatureId ? { signatureId } : {}),
       },
     })
 
@@ -32,10 +59,23 @@ export async function POST(request: Request) {
         id: true,
         fileName: true,
         uploadedAt: true,
+        signature: {
+          select: {
+            name: true,
+          },
+        },
       },
     })
 
-    return NextResponse.json(leadFiles, { status: 201 })
+    return NextResponse.json(
+      leadFiles.map((file) => ({
+        id: file.id,
+        fileName: file.fileName,
+        uploadedAt: file.uploadedAt,
+        signatureName: file.signature?.name ?? null,
+      })),
+      { status: 201 },
+    )
   } catch (error) {
     console.error("lead-file POST error:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })

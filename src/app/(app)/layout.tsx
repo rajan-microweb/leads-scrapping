@@ -36,6 +36,7 @@ export default async function AppLayout({
           email: user?.email ?? null,
         }}
         avatarUrl={avatarUrl}
+        userRole={session.user?.role ?? "CLIENT"}
       />
 
       {/* Main content area */}
