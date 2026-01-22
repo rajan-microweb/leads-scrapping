@@ -229,105 +229,21 @@ export default function LeadsPage() {
                   const formData = new FormData()
                   formData.append("file", selectedFile)
 
-                  // We'll send structured objects to n8n under these keys:
-                  // - personalDetails
-                  // - companyDetails
-                  // - integrationDetails
-                  let personalDetails: any = null
-                  let companyDetails: any = null
-                  let integrationDetails: any = null
-
-                  // 1a. Load personal user details (profile)
+                  // 1a. Get userId from profile (only need the id, not full details)
+                  let userId = ""
                   try {
                     const profileRes = await fetch("/api/profile")
                     if (profileRes.ok) {
                       const userProfile: any = await profileRes.json()
-                      if (userProfile && !userProfile.error) {
-                        // Do not send image/avatar fields
-                        const { image, avatarUrl, ...rest } = userProfile ?? {}
-                        personalDetails = rest
+                      if (userProfile && !userProfile.error && userProfile.id) {
+                        userId = userProfile.id
                       }
                     }
                   } catch {
-                    // If profile fails to load, continue without it
+                    // If profile fails to load, continue without userId
                   }
 
-                  // 1b. Load integrations (connected platforms)
-                  try {
-                    const integrationsRes = await fetch("/api/integrations")
-                    if (integrationsRes.ok) {
-                      const integrations: any = await integrationsRes.json()
-                      if (integrations && !integrations.error) {
-                        // Send integrations as an array (even if it contains a single item),
-                        // matching the earlier n8n payload screenshot.
-                        integrationDetails = Array.isArray(integrations)
-                          ? integrations
-                          : []
-                      }
-                    }
-                  } catch {
-                    // If integrations fail to load, continue without them
-                  }
-
-                  // 1c. Load latest MyCompanyInfo for this user
-                  try {
-                    const companyInfoRes = await fetch("/api/my-company-info")
-
-                    if (companyInfoRes.ok) {
-                      const rawCompanyInfo: any = await companyInfoRes.json()
-
-                      if (rawCompanyInfo && !rawCompanyInfo.error) {
-                        const normalizeToArray = (value: unknown): string[] => {
-                          if (!value) return []
-                          if (Array.isArray(value)) {
-                            return value.map((v) => String(v))
-                          }
-                          if (typeof value === "string") {
-                            try {
-                              const parsed = JSON.parse(value)
-                              if (Array.isArray(parsed)) {
-                                return parsed.map((v) => String(v))
-                              }
-                            } catch {
-                              // fall through and treat as single string
-                            }
-                            return [value]
-                          }
-                          return [String(value)]
-                        }
-
-                        const companyInfo = {
-                          id: rawCompanyInfo.id,
-                          userId: rawCompanyInfo.userId,
-                          websiteName: rawCompanyInfo.websiteName,
-                          websiteUrl: rawCompanyInfo.websiteUrl,
-                          companyName: rawCompanyInfo.companyName ?? null,
-                          companyType: rawCompanyInfo.companyType ?? null,
-                          industryExpertise: normalizeToArray(
-                            rawCompanyInfo.industryExpertise,
-                          ),
-                          fullTechSummary: normalizeToArray(
-                            rawCompanyInfo.fullTechSummary,
-                          ),
-                          serviceCatalog: normalizeToArray(
-                            rawCompanyInfo.serviceCatalog,
-                          ),
-                          theHook: rawCompanyInfo.theHook ?? null,
-                          whatTheyDo: rawCompanyInfo.whatTheyDo ?? null,
-                          valueProposition:
-                            rawCompanyInfo.valueProposition ?? null,
-                          brandTone: normalizeToArray(rawCompanyInfo.brandTone),
-                          createdAt: rawCompanyInfo.createdAt,
-                          updatedAt: rawCompanyInfo.updatedAt,
-                        }
-                        companyDetails = companyInfo
-                      }
-                    }
-                  } catch {
-                    // If company info fails to load, continue with file only
-                  }
-
-                  // 1d. Attach selected signature details, if any
+                  // 1b. Attach selected signature details, if any
                   let selectedSignature: Signature | null = null
                   if (selectedSignatureId) {
                     selectedSignature =
@@ -335,26 +251,26 @@ export default function LeadsPage() {
                       null
                   }
 
-                  // 1e. Append the details as JSON strings (the "earlier" n8n format you showed).
-                  // n8n will display these as text fields which you can parse downstream if needed.
-                  formData.append(
-                    "personalDetails",
-                    JSON.stringify(personalDetails ?? {}),
-                  )
-                  formData.append(
-                    "companyDetails",
-                    JSON.stringify(companyDetails ?? {}),
-                  )
-                  formData.append(
-                    "integrationDetails",
-                    JSON.stringify(integrationDetails ?? []),
-                  )
-                  formData.append(
-                    "signature",
-                    JSON.stringify(selectedSignature ?? {}),
-                  )
+                  // Add userId as a separate field
+                  formData.append("userId", userId)
+                  
+                  // Add signature fields separately
+                  if (selectedSignature) {
+                    formData.append("signatureId", selectedSignature.id ?? "")
+                    formData.append("signatureName", selectedSignature.name ?? "")
+                    formData.append("signatureContent", selectedSignature.content ?? "")
+                    formData.append("signatureCreatedAt", selectedSignature.createdAt ?? "")
+                    formData.append("signatureUpdatedAt", selectedSignature.updatedAt ?? "")
+                  } else {
+                    // Send empty strings if no signature is selected
+                    formData.append("signatureId", "")
+                    formData.append("signatureName", "")
+                    formData.append("signatureContent", "")
+                    formData.append("signatureCreatedAt", "")
+                    formData.append("signatureUpdatedAt", "")
+                  }
 
-                  // 1f. Send file + company info + user profile + integrations + signature to n8n webhook
+                  // 1c. Send file + userId + signature (with separate fields) to n8n webhook
                   const n8nResponse = await fetch(
                     "https://n8n.srv1248804.hstgr.cloud/webhook/get-leads",
                     {
