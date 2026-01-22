@@ -35,6 +35,8 @@ type Signature = {
   id: string
   name: string
   content: string
+  createdAt: string
+  updatedAt: string
 }
 
 const ALLOWED_EXTENSIONS = [".xlsx", ".xls", ".csv"]

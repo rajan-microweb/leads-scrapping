@@ -65,13 +65,13 @@ export async function POST(request: Request) {
             websiteUrl: d.websiteUrl,
             companyName: d.companyName ?? null,
             companyType: d.companyType ?? null,
-            industryExpertise: d.industryExpertise ?? null,
-            fullTechSummary: d.fullTechSummary ?? null,
-            serviceCatalog: d.serviceCatalog ?? null,
+            industryExpertise: d.industryExpertise ?? undefined,
+            fullTechSummary: d.fullTechSummary ?? undefined,
+            serviceCatalog: d.serviceCatalog ?? undefined,
             theHook: d.theHook ?? null,
             whatTheyDo: d.whatTheyDo ?? null,
             valueProposition: d.valueProposition ?? null,
-            brandTone: d.brandTone ?? null,
+            brandTone: d.brandTone ?? undefined,
           },
         })
       : await prisma.myCompanyInfo.create({
@@ -82,13 +82,13 @@ export async function POST(request: Request) {
 
             companyName: d.companyName ?? null,
             companyType: d.companyType ?? null,
-            industryExpertise: d.industryExpertise ?? null,
-            fullTechSummary: d.fullTechSummary ?? null,
-            serviceCatalog: d.serviceCatalog ?? null,
+            industryExpertise: d.industryExpertise ?? undefined,
+            fullTechSummary: d.fullTechSummary ?? undefined,
+            serviceCatalog: d.serviceCatalog ?? undefined,
             theHook: d.theHook ?? null,
             whatTheyDo: d.whatTheyDo ?? null,
             valueProposition: d.valueProposition ?? null,
-            brandTone: d.brandTone ?? null,
+            brandTone: d.brandTone ?? undefined,
           },
         })
 

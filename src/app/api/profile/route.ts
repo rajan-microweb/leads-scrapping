@@ -121,10 +121,10 @@ export async function POST(request: Request) {
       orderBy: { createdAt: "desc" },
     })
 
-    const serviceCatalog = company_intelligence.service_catalog ?? null
-    const industryExpertise = company_intelligence.industry_expertise ?? null
-    const fullTechSummary = company_intelligence.full_tech_summary ?? null
-    const brandTone = company_intelligence.brand_tone ?? null
+    const serviceCatalog = company_intelligence.service_catalog ?? undefined
+    const industryExpertise = company_intelligence.industry_expertise ?? undefined
+    const fullTechSummary = company_intelligence.full_tech_summary ?? undefined
+    const brandTone = company_intelligence.brand_tone ?? undefined
 
     const myCompanyInfo = latestCompany
       ? await prisma.myCompanyInfo.update({
