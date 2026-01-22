@@ -6,8 +6,14 @@ export default auth((req) => {
   const isLoggedIn = !!req.auth
 
   // Public routes
-  const publicRoutes = ["/", "/auth/signin", "/auth/signup"]
-  const isPublicRoute = publicRoutes.includes(pathname)
+  const publicRoutes = [
+    "/",
+    "/auth/signin",
+    "/auth/signup",
+    "/auth/forgot-password",
+    "/auth/reset-password",
+  ]
+  const isPublicRoute = publicRoutes.includes(pathname) || pathname.startsWith("/auth/reset-password")
 
   // Redirect to sign in if accessing protected route
   if (!isLoggedIn && !isPublicRoute) {
@@ -25,7 +31,9 @@ export default auth((req) => {
   // Redirect to dashboard if logged in and trying to access auth pages
   if (
     isLoggedIn &&
-    (pathname === "/auth/signin" || pathname === "/auth/signup")
+    (pathname === "/auth/signin" ||
+      pathname === "/auth/signup" ||
+      pathname === "/auth/forgot-password")
   ) {
     return NextResponse.redirect(new URL("/dashboard", req.url))
   }
