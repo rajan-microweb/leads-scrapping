@@ -513,7 +513,6 @@ export default function LeadsPage() {
             </form>
           </DialogContent>
         </Dialog>
-      </div>
 
       <div className="grid gap-3 sm:grid-cols-3">
         <Card className="border-dashed">
