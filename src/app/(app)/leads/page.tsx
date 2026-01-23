@@ -62,6 +62,7 @@ export default function LeadsPage() {
   const [isCheckingOutlook, setIsCheckingOutlook] = useState(true)
   const [createLeadsDialogOpen, setCreateLeadsDialogOpen] = useState(false)
   const [connectAccountDialogOpen, setConnectAccountDialogOpen] = useState(false)
+  const [noSignaturesDialogOpen, setNoSignaturesDialogOpen] = useState(false)
 
   const pageSize = 10
 
@@ -111,51 +112,42 @@ export default function LeadsPage() {
     }
   }, [])
 
-  useEffect(() => {
-    let isMounted = true
+  const loadSignatures = async (): Promise<Signature[]> => {
+    try {
+      setSignaturesLoading(true)
+      setSignaturesError(null)
 
-    const loadSignatures = async () => {
-      try {
-        setSignaturesLoading(true)
-        setSignaturesError(null)
+      const res = await fetch("/api/signatures")
 
-        const res = await fetch("/api/signatures")
-
-        if (!res.ok) {
-          // If user is unauthorized or another error occurs, just show a friendly message.
-          throw new Error(
-            res.status === 401
-              ? "You must be signed in to load signatures."
-              : "Failed to load signatures.",
-          )
-        }
-
-        const data = (await res.json()) as Signature[]
-
-        if (isMounted) {
-          setSignatures(data ?? [])
-        }
-      } catch (err) {
-        if (isMounted) {
-          setSignaturesError(
-            err instanceof Error
-              ? err.message
-              : "An unexpected error occurred while loading signatures.",
-          )
-          setSignatures([])
-        }
-      } finally {
-        if (isMounted) {
-          setSignaturesLoading(false)
-        }
+      if (!res.ok) {
+        // If user is unauthorized or another error occurs, just show a friendly message.
+        throw new Error(
+          res.status === 401
+            ? "You must be signed in to load signatures."
+            : "Failed to load signatures.",
+        )
       }
-    }
 
+      const data = (await res.json()) as Signature[]
+      const signaturesData = data ?? []
+      setSignatures(signaturesData)
+      setSignaturesError(null)
+      return signaturesData
+    } catch (err) {
+      const errorMessage =
+        err instanceof Error
+          ? err.message
+          : "An unexpected error occurred while loading signatures."
+      setSignaturesError(errorMessage)
+      setSignatures([])
+      throw err
+    } finally {
+      setSignaturesLoading(false)
+    }
+  }
+
+  useEffect(() => {
     void loadSignatures()
-
-    return () => {
-      isMounted = false
-    }
   }, [])
 
   // Check Outlook integration status on mount
@@ -219,7 +211,7 @@ export default function LeadsPage() {
     return fileName.substring(dotIndex + 1).toUpperCase()
   }
 
-  const handleCreateLeadsClick = () => {
+  const handleCreateLeadsClick = async () => {
     // If still checking, don't do anything
     if (isCheckingOutlook) {
       return
@@ -231,15 +223,36 @@ export default function LeadsPage() {
       return
     }
 
-    // If Outlook is connected, open the create leads dialog
+    // If Outlook is connected, fetch and check for signatures
     if (isOutlookConnected === true) {
-      setCreateLeadsDialogOpen(true)
+      try {
+        // Fetch available signatures for the current user
+        const fetchedSignatures = await loadSignatures()
+
+        // If no signatures are found, show the no signatures modal
+        if (fetchedSignatures.length === 0) {
+          setNoSignaturesDialogOpen(true)
+          return
+        }
+
+        // If signatures exist, open the create leads dialog
+        setCreateLeadsDialogOpen(true)
+      } catch (err) {
+        // If there's an error loading signatures, still allow the user to proceed
+        // (they can select "No signature" option)
+        setCreateLeadsDialogOpen(true)
+      }
     }
   }
 
   const handleConnectAccount = () => {
     setConnectAccountDialogOpen(false)
     router.push("/integrations")
+  }
+
+  const handleCreateSignature = () => {
+    setNoSignaturesDialogOpen(false)
+    router.push("/signatures")
   }
 
   return (
@@ -282,6 +295,30 @@ export default function LeadsPage() {
             </Button>
             <Button type="button" onClick={handleConnectAccount}>
               Connect Account
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* No Signatures Modal */}
+      <Dialog open={noSignaturesDialogOpen} onOpenChange={setNoSignaturesDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>No Signatures Found</DialogTitle>
+            <DialogDescription>
+              No signatures found. Please create a signature to continue.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setNoSignaturesDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button type="button" onClick={handleCreateSignature}>
+              Create Signature
             </Button>
           </DialogFooter>
         </DialogContent>
