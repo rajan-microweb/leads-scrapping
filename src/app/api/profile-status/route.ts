@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
+import { supabaseAdmin } from "@/lib/supabase-server"
 
 export async function GET() {
   try {
@@ -9,11 +9,13 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const latest = await prisma.websiteSubmission.findFirst({
-      where: { userId: session.user.id },
-      orderBy: { createdAt: "desc" },
-      select: { id: true },
-    })
+    const { data: latest } = await supabaseAdmin
+      .from('WebsiteSubmission')
+      .select('id')
+      .eq('userId', session.user.id)
+      .order('createdAt', { ascending: false })
+      .limit(1)
+      .single()
 
     return NextResponse.json(
       {

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
+import { supabaseAdmin } from "@/lib/supabase-server"
+import { generateId } from "@/lib/cuid"
 
 export async function GET() {
   try {
@@ -10,21 +11,20 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const integrations = await prisma.integration.findMany({
-      where: { userId: session.user.id },
-      select: {
-        id: true,
-        platformName: true,
-        isConnected: true,
-        createdAt: true,
-        updatedAt: true,
-        // Expose credentials so they can be forwarded to downstream services (e.g. n8n)
-        // Note: this endpoint is only available to the authenticated user who owns the integration.
-        credentials: true,
-      },
-    })
+    const { data: integrations, error } = await supabaseAdmin
+      .from('integrations')
+      .select('id, "platformName", "isConnected", "createdAt", "updatedAt", credentials')
+      .eq('userId', session.user.id)
 
-    return NextResponse.json(integrations, { status: 200 })
+    if (error) {
+      console.error("integrations GET error:", error)
+      return NextResponse.json(
+        { error: "Internal server error" },
+        { status: 500 }
+      )
+    }
+
+    return NextResponse.json(integrations || [], { status: 200 })
   } catch (error) {
     console.error("integrations GET error:", error)
     return NextResponse.json(
@@ -89,29 +89,42 @@ export async function POST(request: Request) {
     }
 
     // Check if integration already exists for this user and platform
-    const existingIntegration = await prisma.integration.findFirst({
-      where: {
-        userId: session.user.id,
-        platformName,
-      },
-    })
+    const { data: existingIntegration } = await supabaseAdmin
+      .from('integrations')
+      .select('id')
+      .eq('userId', session.user.id)
+      .eq('platformName', platformName)
+      .single()
 
-    const integration = existingIntegration
-      ? await prisma.integration.update({
-          where: { id: existingIntegration.id },
-          data: {
-            credentials,
-            isConnected: true,
-          },
+    let integration
+    if (existingIntegration) {
+      const { data } = await supabaseAdmin
+        .from('integrations')
+        .update({
+          credentials,
+          isConnected: true,
+          updatedAt: new Date().toISOString(),
         })
-      : await prisma.integration.create({
-          data: {
-            userId: session.user.id,
-            platformName,
-            credentials,
-            isConnected: true,
-          },
+        .eq('id', existingIntegration.id)
+        .select()
+        .single()
+      integration = data
+    } else {
+      const { data } = await supabaseAdmin
+        .from('integrations')
+        .insert({
+          id: generateId(),
+          userId: session.user.id,
+          platformName,
+          credentials,
+          isConnected: true,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
         })
+        .select()
+        .single()
+      integration = data
+    }
 
     // Return success without credentials
     return NextResponse.json(
@@ -152,12 +165,12 @@ export async function DELETE(request: Request) {
     const platformName = body.platformName.trim().toLowerCase()
 
     // Find the integration for this user and platform
-    const integration = await prisma.integration.findFirst({
-      where: {
-        userId: session.user.id,
-        platformName,
-      },
-    })
+    const { data: integration } = await supabaseAdmin
+      .from('integrations')
+      .select('id')
+      .eq('userId', session.user.id)
+      .eq('platformName', platformName)
+      .single()
 
     if (!integration) {
       return NextResponse.json(
@@ -167,9 +180,10 @@ export async function DELETE(request: Request) {
     }
 
     // Delete the integration
-    await prisma.integration.delete({
-      where: { id: integration.id },
-    })
+    await supabaseAdmin
+      .from('integrations')
+      .delete()
+      .eq('id', integration.id)
 
     return NextResponse.json(
       { success: true, message: "Integration disconnected successfully" },

@@ -1,7 +1,7 @@
 import Link from "next/link"
 import { auth, signOut } from "@/lib/auth"
 import { redirect } from "next/navigation"
-import { prisma } from "@/lib/prisma"
+import { supabaseAdmin } from "@/lib/supabase-server"
 import { AdminSidebar } from "@/components/admin-sidebar"
 import { Button } from "@/components/ui/button"
 import { SidebarToggle } from "@/components/layout/SidebarToggle"
@@ -15,15 +15,11 @@ export default async function AppLayout({
   if (!session) redirect("/auth/signin")
 
   // Fetch user avatar
-  const user = await prisma.user.findUnique({
-    where: { id: session.user?.id },
-    select: {
-      avatarUrl: true,
-      image: true,
-      name: true,
-      email: true,
-    },
-  })
+  const { data: user } = await supabaseAdmin
+    .from('User')
+    .select('"avatarUrl", image, name, email')
+    .eq('id', session.user?.id)
+    .single()
 
   const avatarUrl = user?.avatarUrl ?? user?.image ?? null
 

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { prisma } from "@/lib/prisma"
+import { supabaseAdmin } from "@/lib/supabase-server"
 import { z } from "zod"
 import bcrypt from "bcryptjs"
 
@@ -22,10 +22,11 @@ export async function GET(request: Request) {
     }
 
     // Find token in database
-    const resetToken = await prisma.passwordResetToken.findUnique({
-      where: { token },
-      include: { user: true },
-    })
+    const { data: resetToken } = await supabaseAdmin
+      .from('PasswordResetToken')
+      .select('*, User(*)')
+      .eq('token', token)
+      .single()
 
     if (!resetToken) {
       return NextResponse.json(
@@ -35,11 +36,12 @@ export async function GET(request: Request) {
     }
 
     // Check if token is expired
-    if (resetToken.expires < new Date()) {
+    if (new Date(resetToken.expires) < new Date()) {
       // Delete expired token
-      await prisma.passwordResetToken.delete({
-        where: { id: resetToken.id },
-      })
+      await supabaseAdmin
+        .from('PasswordResetToken')
+        .delete()
+        .eq('id', resetToken.id)
       return NextResponse.json(
         { valid: false, error: "Token has expired" },
         { status: 400 }
@@ -75,10 +77,11 @@ export async function POST(request: Request) {
     const { token, password } = parsed.data
 
     // Find token in database
-    const resetToken = await prisma.passwordResetToken.findUnique({
-      where: { token },
-      include: { user: true },
-    })
+    const { data: resetToken } = await supabaseAdmin
+      .from('PasswordResetToken')
+      .select('*, User(*)')
+      .eq('token', token)
+      .single()
 
     if (!resetToken) {
       return NextResponse.json(
@@ -88,11 +91,12 @@ export async function POST(request: Request) {
     }
 
     // Check if token is expired
-    if (resetToken.expires < new Date()) {
+    if (new Date(resetToken.expires) < new Date()) {
       // Delete expired token
-      await prisma.passwordResetToken.delete({
-        where: { id: resetToken.id },
-      })
+      await supabaseAdmin
+        .from('PasswordResetToken')
+        .delete()
+        .eq('id', resetToken.id)
       return NextResponse.json(
         { error: "Reset token has expired. Please request a new one." },
         { status: 400 }
@@ -103,17 +107,19 @@ export async function POST(request: Request) {
     const hashedPassword = await bcrypt.hash(password, 10)
 
     // Update user password
-    await prisma.user.update({
-      where: { id: resetToken.userId },
-      data: {
+    await supabaseAdmin
+      .from('User')
+      .update({
         password: hashedPassword,
-      },
-    })
+        updatedAt: new Date().toISOString(),
+      })
+      .eq('id', resetToken.userId)
 
     // Delete the used token
-    await prisma.passwordResetToken.delete({
-      where: { id: resetToken.id },
-    })
+    await supabaseAdmin
+      .from('PasswordResetToken')
+      .delete()
+      .eq('id', resetToken.id)
 
     return NextResponse.json(
       { message: "Password reset successfully" },

@@ -1,23 +1,19 @@
 # Vercel Deployment Guide
 
-This guide helps you fix and troubleshoot deploying **leads-scrapping** (Next.js + Prisma + NextAuth) to Vercel.
+This guide helps you fix and troubleshoot deploying **leads-scrapping** (Next.js + Supabase + NextAuth) to Vercel.
 
 ---
 
-## 1. Use a Cloud PostgreSQL Database
+## 1. Use Supabase as Your Database
 
-**Your local PostgreSQL (`localhost`) will NOT work on Vercel.** Vercel runs in the cloud and cannot reach your machine.
+This project is configured to use **Supabase** (hosted PostgreSQL).
 
-Use one of these **free-tier** options:
-
-| Provider | Notes |
-|----------|--------|
-| [Neon](https://neon.tech) | Serverless Postgres, great for Vercel. Use the **pooled** connection string. |
-| [Supabase](https://supabase.com) | Postgres + auth. Use **Connection pooling** → "Transaction" mode URL. |
-| [Railway](https://railway.app) | Simple setup. Use the public URL they provide. |
-| [Vercel Postgres](https://vercel.com/storage/postgres) | Integrates directly with Vercel. |
-
-Create a project, get the **connection string**, and use it as `DATABASE_URL` in Vercel.
+1. Go to `https://supabase.com` and create a project.
+2. In **Settings → API**, copy:
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - `SUPABASE_SERVICE_ROLE_KEY`
+3. In **Settings → Database**, copy the Postgres connection string and use it as `DATABASE_URL` in Vercel.
 
 ---
 
@@ -27,7 +23,7 @@ Set these in **Vercel Dashboard → Your Project → Settings → Environment Va
 
 | Variable | Required | Example / Notes |
 |----------|----------|------------------|
-| `DATABASE_URL` | **Yes** | Your cloud Postgres URL (e.g. Neon, Supabase). **Not** `localhost`. |
+| `DATABASE_URL` | **Yes** | Your Supabase Postgres URL. **Not** `localhost`. |
 | `AUTH_SECRET` | **Yes** | Generate: `openssl rand -base64 32` |
 | `AUTH_URL` | **Yes** | Your Vercel app URL, e.g. `https://your-app.vercel.app` |
 | `APP_URL` | Recommended | Same as `AUTH_URL` (used for password reset emails) |
@@ -44,9 +40,8 @@ Set these in **Vercel Dashboard → Your Project → Settings → Environment Va
 
 The project is already set up for Vercel:
 
-- **Build command:** `prisma generate && next build` (in `package.json` and `vercel.json`)
+- **Build command:** `next build` (in `vercel.json`)
 - **Output:** Next.js (auto-detected via `vercel.json` / framework)
-- **Prisma:** Runs `prisma generate` before every build to avoid "outdated Prisma Client" errors.
 
 No extra Vercel build settings are required.
 
@@ -54,12 +49,8 @@ No extra Vercel build settings are required.
 
 ## 4. After Deploying
 
-1. **Run migrations on your cloud DB:**  
-   Locally, point `.env` at your **cloud** `DATABASE_URL`, then run:
-   ```bash
-   npx prisma db push
-   ```
-   Or use `prisma migrate deploy` if you use migrations.
+1. **Ensure schema exists in Supabase:**  
+   - Run the SQL from `SUPABASE-MIGRATION-COMPLETE.md` in the Supabase SQL editor (locally or before first deploy).
 
 2. **Test the app:**  
    Open `https://your-app.vercel.app`. Sign up, sign in, and test main flows.
@@ -71,15 +62,12 @@ No extra Vercel build settings are required.
 
 ## 5. Common Errors & Fixes
 
-### Build fails: "Prisma Client not generated" or "schema out of sync"
-
-- Ensure **Build Command** is `prisma generate && next build` (already in `vercel.json`).
-- In Vercel **Settings → General**, clear **Build Cache** and redeploy.
-
 ### Runtime: "Can't reach database server" / connection timeouts
 
-- `DATABASE_URL` must be a **cloud** Postgres URL (Neon, Supabase, etc.), not `localhost`.
-- If using Neon/Supabase, use their **pooled** connection string for serverless.
+- `DATABASE_URL` must be your **Supabase** Postgres URL, not `localhost`.
+
+**If Vercel logs say `Can't reach database server at localhost:5432`:**  
+Your `DATABASE_URL` in Vercel points to localhost. Vercel cannot reach your machine. Use your Supabase connection string instead and redeploy.
 
 ### Runtime: "AUTH_SECRET is missing" or auth redirect issues
 
@@ -89,7 +77,7 @@ No extra Vercel build settings are required.
 ### 500 errors on API routes
 
 - Check **Logs** in Vercel for the real error (often DB or env related).
-- Confirm all required env vars are set for **Production** and that `DATABASE_URL` is correct.
+- Confirm all required env vars are set for **Production** and that `DATABASE_URL` points to Supabase.
 
 ### Password reset emails not sending
 
@@ -100,11 +88,11 @@ No extra Vercel build settings are required.
 
 ## 6. Quick Checklist
 
-- [ ] Database is **cloud Postgres** (Neon, Supabase, etc.), not localhost.
+- [ ] Database is **Supabase Postgres**, not localhost.
 - [ ] `DATABASE_URL`, `AUTH_SECRET`, `AUTH_URL` set in Vercel.
 - [ ] `AUTH_URL` and `APP_URL` use your **production** Vercel URL (HTTPS).
-- [ ] Migrations / `prisma db push` run against the **cloud** database.
-- [ ] Build uses `prisma generate && next build`.
+- [ ] Supabase schema created via the SQL in `SUPABASE-MIGRATION-COMPLETE.md`.
+- [ ] Build uses `next build`.
 - [ ] (Optional) SMTP configured for password reset.
 
 ---

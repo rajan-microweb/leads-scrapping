@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
+import { supabaseAdmin } from "@/lib/supabase-server"
 
 export async function GET() {
   try {
@@ -10,23 +10,19 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const leadFiles = await prisma.leadFile.findMany({
-      where: { userId: session.user.id },
-      orderBy: { uploadedAt: "desc" },
-      select: {
-        id: true,
-        fileName: true,
-        uploadedAt: true,
-        signature: {
-          select: {
-            name: true,
-          },
-        },
-      },
-    })
+    const { data: leadFiles } = await supabaseAdmin
+      .from('LeadFile')
+      .select(`
+        id,
+        fileName,
+        uploadedAt,
+        signature:signatures(name)
+      `)
+      .eq('userId', session.user.id)
+      .order('uploadedAt', { ascending: false })
 
     return NextResponse.json(
-      leadFiles.map((file) => ({
+      (leadFiles || []).map((file: any) => ({
         id: file.id,
         fileName: file.fileName,
         uploadedAt: file.uploadedAt,

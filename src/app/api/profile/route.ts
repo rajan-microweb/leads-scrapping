@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
+import { supabaseAdmin } from "@/lib/supabase-server"
 import { z } from "zod"
+import { generateId } from "@/lib/cuid"
 
 const companyIntelligenceSchema = z.object({
   company_name: z.string().optional().nullable(),
@@ -35,23 +36,16 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: {
-        id: true,
-        name: true,
-        fullName: true,
-        email: true,
-        phone: true,
-        jobTitle: true,
-        country: true,
-        timezone: true,
-        image: true,
-        avatarUrl: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    })
+    const { data: user, error } = await supabaseAdmin
+      .from('User')
+      .select('id, name, "fullName", email, phone, "jobTitle", country, timezone, image, "avatarUrl", "createdAt", "updatedAt"')
+      .eq('id', session.user.id)
+      .single()
+
+    if (error) {
+      console.error("profile GET error:", error)
+      return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    }
 
     return NextResponse.json(user ?? null, { status: 200 })
   } catch (error) {
@@ -83,82 +77,113 @@ export async function POST(request: Request) {
 
     // Email is managed by auth; ignore if provided
     if (Object.keys(userUpdateData).length > 0) {
-      await prisma.user.update({
-        where: { id: session.user.id },
-        data: userUpdateData,
-      })
+      userUpdateData.updatedAt = new Date().toISOString()
+      await supabaseAdmin
+        .from('User')
+        .update(userUpdateData)
+        .eq('id', session.user.id)
     }
 
     // Store in WebsiteSubmission.extractedData as: [{ company_intelligence: { ... } }]
     const extractedData = [{ company_intelligence }]
 
-    const latestSubmission = await prisma.websiteSubmission.findFirst({
-      where: { userId: session.user.id },
-      orderBy: { createdAt: "desc" },
-    })
+    const { data: latestSubmission } = await supabaseAdmin
+      .from('WebsiteSubmission')
+      .select('id')
+      .eq('userId', session.user.id)
+      .order('createdAt', { ascending: false })
+      .limit(1)
+      .single()
 
-    const websiteSubmission = latestSubmission
-      ? await prisma.websiteSubmission.update({
-          where: { id: latestSubmission.id },
-          data: {
-            websiteName,
-            websiteUrl,
-            extractedData,
-          },
+    let websiteSubmission
+    if (latestSubmission) {
+      const { data } = await supabaseAdmin
+        .from('WebsiteSubmission')
+        .update({
+          websiteName,
+          websiteUrl,
+          extractedData,
         })
-      : await prisma.websiteSubmission.create({
-          data: {
-            userId: session.user.id,
-            websiteName,
-            websiteUrl,
-            extractedData,
-          },
+        .eq('id', latestSubmission.id)
+        .select()
+        .single()
+      websiteSubmission = data
+    } else {
+      const { data } = await supabaseAdmin
+        .from('WebsiteSubmission')
+        .insert({
+          id: generateId(),
+          userId: session.user.id,
+          websiteName,
+          websiteUrl,
+          extractedData,
+          createdAt: new Date().toISOString(),
         })
+        .select()
+        .single()
+      websiteSubmission = data
+    }
 
     // Keep my_company_info table in sync for dashboard use
-    const latestCompany = await prisma.myCompanyInfo.findFirst({
-      where: { userId: session.user.id },
-      orderBy: { createdAt: "desc" },
-    })
+    const { data: latestCompany } = await supabaseAdmin
+      .from('my_company_info')
+      .select('id')
+      .eq('userId', session.user.id)
+      .order('createdAt', { ascending: false })
+      .limit(1)
+      .single()
 
     const serviceCatalog = company_intelligence.service_catalog ?? undefined
     const industryExpertise = company_intelligence.industry_expertise ?? undefined
     const fullTechSummary = company_intelligence.full_tech_summary ?? undefined
     const brandTone = company_intelligence.brand_tone ?? undefined
 
-    const myCompanyInfo = latestCompany
-      ? await prisma.myCompanyInfo.update({
-          where: { id: latestCompany.id },
-          data: {
-            websiteName,
-            websiteUrl,
-            companyName: company_intelligence.company_name ?? null,
-            companyType: company_intelligence.company_type ?? null,
-            industryExpertise,
-            fullTechSummary,
-            serviceCatalog,
-            theHook: company_intelligence.the_hook ?? null,
-            whatTheyDo: company_intelligence.what_they_do ?? null,
-            valueProposition: company_intelligence.value_prop ?? null,
-            brandTone,
-          },
+    let myCompanyInfo
+    if (latestCompany) {
+      const { data } = await supabaseAdmin
+        .from('my_company_info')
+        .update({
+          websiteName,
+          websiteUrl,
+          companyName: company_intelligence.company_name ?? null,
+          companyType: company_intelligence.company_type ?? null,
+          industryExpertise,
+          fullTechSummary,
+          serviceCatalog,
+          theHook: company_intelligence.the_hook ?? null,
+          whatTheyDo: company_intelligence.what_they_do ?? null,
+          valueProposition: company_intelligence.value_prop ?? null,
+          brandTone,
+          updatedAt: new Date().toISOString(),
         })
-      : await prisma.myCompanyInfo.create({
-          data: {
-            userId: session.user.id,
-            websiteName,
-            websiteUrl,
-            companyName: company_intelligence.company_name ?? null,
-            companyType: company_intelligence.company_type ?? null,
-            industryExpertise,
-            fullTechSummary,
-            serviceCatalog,
-            theHook: company_intelligence.the_hook ?? null,
-            whatTheyDo: company_intelligence.what_they_do ?? null,
-            valueProposition: company_intelligence.value_prop ?? null,
-            brandTone,
-          },
+        .eq('id', latestCompany.id)
+        .select()
+        .single()
+      myCompanyInfo = data
+    } else {
+      const { data } = await supabaseAdmin
+        .from('my_company_info')
+        .insert({
+          id: generateId(),
+          userId: session.user.id,
+          websiteName,
+          websiteUrl,
+          companyName: company_intelligence.company_name ?? null,
+          companyType: company_intelligence.company_type ?? null,
+          industryExpertise,
+          fullTechSummary,
+          serviceCatalog,
+          theHook: company_intelligence.the_hook ?? null,
+          whatTheyDo: company_intelligence.what_they_do ?? null,
+          valueProposition: company_intelligence.value_prop ?? null,
+          brandTone,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
         })
+        .select()
+        .single()
+      myCompanyInfo = data
+    }
 
     return NextResponse.json(
       {

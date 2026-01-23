@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { prisma } from "@/lib/prisma"
+import { supabaseAdmin } from "@/lib/supabase-server"
 
 // CORS headers helper
 const corsHeaders = {
@@ -28,25 +28,13 @@ export async function GET(request: Request) {
     }
 
     // Fetch personal details
-    const personal = await prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        id: true,
-        name: true,
-        fullName: true,
-        email: true,
-        phone: true,
-        jobTitle: true,
-        country: true,
-        timezone: true,
-        image: true,
-        avatarUrl: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    })
+    const { data: personal, error: personalError } = await supabaseAdmin
+      .from('User')
+      .select('id, name, "fullName", email, phone, "jobTitle", country, timezone, image, "avatarUrl", "createdAt", "updatedAt"')
+      .eq('id', userId)
+      .single()
 
-    if (!personal) {
+    if (personalError || !personal) {
       return NextResponse.json(
         { error: "User not found" },
         { 
@@ -57,29 +45,25 @@ export async function GET(request: Request) {
     }
 
     // Fetch company details
-    const company = await prisma.myCompanyInfo.findFirst({
-      where: { userId },
-      orderBy: { createdAt: "desc" },
-    })
+    const { data: company } = await supabaseAdmin
+      .from('my_company_info')
+      .select('*')
+      .eq('userId', userId)
+      .order('createdAt', { ascending: false })
+      .limit(1)
+      .single()
 
     // Fetch integration details
-    const integrations = await prisma.integration.findMany({
-      where: { userId },
-      select: {
-        id: true,
-        platformName: true,
-        isConnected: true,
-        credentials: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    })
+    const { data: integrations } = await supabaseAdmin
+      .from('integrations')
+      .select('id, "platformName", "isConnected", credentials, "createdAt", "updatedAt"')
+      .eq('userId', userId)
 
     return NextResponse.json(
       {
         personal,
-        company,
-        integrations,
+        company: company || null,
+        integrations: integrations || [],
       },
       { 
         status: 200,
@@ -114,25 +98,13 @@ export async function POST(request: Request) {
     }
 
     // Fetch personal details
-    const personal = await prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        id: true,
-        name: true,
-        fullName: true,
-        email: true,
-        phone: true,
-        jobTitle: true,
-        country: true,
-        timezone: true,
-        image: true,
-        avatarUrl: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    })
+    const { data: personal, error: personalError } = await supabaseAdmin
+      .from('User')
+      .select('id, name, "fullName", email, phone, "jobTitle", country, timezone, image, "avatarUrl", "createdAt", "updatedAt"')
+      .eq('id', userId)
+      .single()
 
-    if (!personal) {
+    if (personalError || !personal) {
       return NextResponse.json(
         { error: "User not found" },
         { 
@@ -143,29 +115,25 @@ export async function POST(request: Request) {
     }
 
     // Fetch company details
-    const company = await prisma.myCompanyInfo.findFirst({
-      where: { userId },
-      orderBy: { createdAt: "desc" },
-    })
+    const { data: company } = await supabaseAdmin
+      .from('my_company_info')
+      .select('*')
+      .eq('userId', userId)
+      .order('createdAt', { ascending: false })
+      .limit(1)
+      .single()
 
     // Fetch integration details
-    const integrations = await prisma.integration.findMany({
-      where: { userId },
-      select: {
-        id: true,
-        platformName: true,
-        isConnected: true,
-        credentials: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    })
+    const { data: integrations } = await supabaseAdmin
+      .from('integrations')
+      .select('id, "platformName", "isConnected", credentials, "createdAt", "updatedAt"')
+      .eq('userId', userId)
 
     return NextResponse.json(
       {
         personal,
-        company,
-        integrations,
+        company: company || null,
+        integrations: integrations || [],
       },
       { 
         status: 200,

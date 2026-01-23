@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
+import { supabaseAdmin } from "@/lib/supabase-server"
 import { z } from "zod"
+import { generateId } from "@/lib/cuid"
 
 const websiteInfoSchema = z.object({
   websiteName: z.string().min(1, "Website name is required"),
@@ -80,14 +81,26 @@ export async function POST(request: Request) {
     }
 
     // Store in database
-    const websiteSubmission = await prisma.websiteSubmission.create({
-      data: {
+    const { data: websiteSubmission, error: dbError } = await supabaseAdmin
+      .from('WebsiteSubmission')
+      .insert({
+        id: generateId(),
         userId: session.user.id,
         websiteName,
         websiteUrl,
         extractedData,
-      },
-    })
+        createdAt: new Date().toISOString(),
+      })
+      .select()
+      .single()
+
+    if (dbError) {
+      console.error("Database error:", dbError)
+      return NextResponse.json(
+        { error: "Failed to save website data" },
+        { status: 500 }
+      )
+    }
 
     // Return both the submission and the extracted data in expected format
     return NextResponse.json(

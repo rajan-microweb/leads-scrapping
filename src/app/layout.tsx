@@ -6,7 +6,7 @@ const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
   title: "Leads Scrapping",
-  description: "Full-stack application with Next.js 14, Prisma, and NextAuth",
+  description: "Full-stack application with Next.js 14, Supabase, and NextAuth",
 }
 
 export default function RootLayout({

@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server"
-import { prisma } from "@/lib/prisma"
+import { supabaseAdmin } from "@/lib/supabase-server"
 import bcrypt from "bcryptjs"
 import { z } from "zod"
+import { generateId } from "@/lib/cuid"
 
 const signupSchema = z.object({
   name: z.string().min(1),
@@ -10,8 +11,17 @@ const signupSchema = z.object({
 })
 
 export async function POST(request: Request) {
+  let body: unknown
   try {
-    const body = await request.json()
+    body = await request.json()
+  } catch {
+    return NextResponse.json(
+      { error: "Invalid JSON body" },
+      { status: 400 }
+    )
+  }
+
+  try {
     const parsed = signupSchema.safeParse(body)
 
     if (!parsed.success) {
@@ -25,9 +35,11 @@ export async function POST(request: Request) {
     const email = parsed.data.email.trim().toLowerCase()
 
     // Check if user already exists
-    const existingUser = await prisma.user.findUnique({
-      where: { email },
-    })
+    const { data: existingUser } = await supabaseAdmin
+      .from('User')
+      .select('id')
+      .eq('email', email)
+      .single()
 
     if (existingUser) {
       return NextResponse.json(
@@ -40,15 +52,33 @@ export async function POST(request: Request) {
     const hashedPassword = await bcrypt.hash(password, 10)
 
     // Create user
-    await prisma.user.create({
-      data: {
-        // Store the signup name in both `name` and `fullName` so profile pages can auto-fill
+    const { error: insertError } = await supabaseAdmin
+      .from('User')
+      .insert({
+        id: generateId(),
         name,
         fullName: name,
         email,
         password: hashedPassword,
-      },
-    })
+        role: 'CLIENT',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      })
+
+    if (insertError) {
+      console.error("Signup error:", insertError)
+      // Unique constraint violation (PostgreSQL error code 23505)
+      if (insertError.code === '23505') {
+        return NextResponse.json(
+          { error: "User already exists" },
+          { status: 400 }
+        )
+      }
+      return NextResponse.json(
+        { error: "Internal server error" },
+        { status: 500 }
+      )
+    }
 
     return NextResponse.json(
       { message: "User created successfully" },

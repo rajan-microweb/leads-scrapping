@@ -1,6 +1,6 @@
 import NextAuth from "next-auth"
-import { PrismaAdapter } from "@auth/prisma-adapter"
-import { prisma } from "@/lib/prisma"
+import { SupabaseAdapter } from "@auth/supabase-adapter"
+import { supabaseAdmin } from "@/lib/supabase-server"
 import Credentials from "next-auth/providers/credentials"
 import { z } from "zod"
 import bcrypt from "bcryptjs"
@@ -11,7 +11,10 @@ const loginSchema = z.object({
 })
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
-  adapter: PrismaAdapter(prisma),
+  adapter: SupabaseAdapter({
+    url: process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    secret: process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  }),
   trustHost: true,
   session: {
     strategy: "jwt",
@@ -35,11 +38,14 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         const { password } = parsed.data
         const email = parsed.data.email.trim().toLowerCase()
 
-        const user = await prisma.user.findUnique({
-          where: { email },
-        })
+        // Query user from Supabase
+        const { data: user, error } = await supabaseAdmin
+          .from('User')
+          .select('*')
+          .eq('email', email)
+          .single()
 
-        if (!user || !user.password) {
+        if (error || !user || !user.password) {
           return null
         }
 

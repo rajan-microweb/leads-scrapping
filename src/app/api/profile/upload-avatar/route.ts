@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
+import { supabaseAdmin } from "@/lib/supabase-server"
 
 export async function POST(request: Request) {
   try {
@@ -27,25 +27,45 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "File size must be less than 5MB" }, { status: 400 })
     }
 
-    // Convert file to base64 data URL
+    // Prepare file for upload to Supabase Storage
     const arrayBuffer = await file.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
-    const base64 = buffer.toString("base64")
-    const dataUrl = `data:${file.type};base64,${base64}`
 
-    // Update user avatar
-    await prisma.user.update({
-      where: { id: session.user.id },
-      data: {
-        avatarUrl: dataUrl,
-        image: dataUrl,
-      },
-    })
+    // Use a unique path per user and upload
+    const fileExt = file.name.split(".").pop() || "png"
+    const sanitizedExt = fileExt.toLowerCase().split("?")[0]
+    const filePath = `${session.user.id}/${Date.now()}.${sanitizedExt}`
+
+    const { error: uploadError } = await supabaseAdmin.storage
+      .from("avatars")
+      .upload(filePath, buffer, {
+        contentType: file.type,
+        upsert: true,
+      })
+
+    if (uploadError) {
+      console.error("Supabase Storage upload error:", uploadError)
+      return NextResponse.json({ error: "Failed to upload avatar" }, { status: 500 })
+    }
+
+    const {
+      data: { publicUrl },
+    } = supabaseAdmin.storage.from("avatars").getPublicUrl(filePath)
+
+    // Update user avatar with public URL from storage
+    await supabaseAdmin
+      .from("User")
+      .update({
+        avatarUrl: publicUrl,
+        image: publicUrl,
+        updatedAt: new Date().toISOString(),
+      })
+      .eq("id", session.user.id)
 
     return NextResponse.json(
       {
         success: true,
-        avatarUrl: dataUrl,
+        avatarUrl: publicUrl,
       },
       { status: 200 }
     )

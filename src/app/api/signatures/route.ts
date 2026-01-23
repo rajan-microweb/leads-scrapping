@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
+import { supabaseAdmin } from "@/lib/supabase-server"
 import { sanitizeHtml } from "@/lib/sanitize-html"
+import { generateId } from "@/lib/cuid"
 
 export async function GET() {
   try {
@@ -11,21 +12,21 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const signatures = await prisma.signature.findMany({
-      where: { userId: session.user.id },
-      select: {
-        id: true,
-        name: true,
-        content: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-      orderBy: {
-        updatedAt: "desc",
-      },
-    })
+    const { data: signatures, error } = await supabaseAdmin
+      .from('signatures')
+      .select('id, name, content, "createdAt", "updatedAt"')
+      .eq('userId', session.user.id)
+      .order('updatedAt', { ascending: false })
 
-    return NextResponse.json(signatures, { status: 200 })
+    if (error) {
+      console.error("signatures GET error:", error)
+      return NextResponse.json(
+        { error: "Internal server error" },
+        { status: 500 }
+      )
+    }
+
+    return NextResponse.json(signatures || [], { status: 200 })
   } catch (error) {
     console.error("signatures GET error:", error)
     return NextResponse.json(
@@ -72,20 +73,26 @@ export async function POST(request: Request) {
       )
     }
 
-    const signature = await prisma.signature.create({
-      data: {
+    const { data: signature, error } = await supabaseAdmin
+      .from('signatures')
+      .insert({
+        id: generateId(),
         userId: session.user.id,
         name,
         content: sanitizedContent,
-      },
-      select: {
-        id: true,
-        name: true,
-        content: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    })
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      })
+      .select('id, name, content, "createdAt", "updatedAt"')
+      .single()
+
+    if (error) {
+      console.error("signatures POST error:", error)
+      return NextResponse.json(
+        { error: "Internal server error" },
+        { status: 500 }
+      )
+    }
 
     return NextResponse.json(signature, { status: 201 })
   } catch (error) {

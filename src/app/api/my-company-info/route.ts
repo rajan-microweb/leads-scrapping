@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
+import { supabaseAdmin } from "@/lib/supabase-server"
 import { z } from "zod"
+import { generateId } from "@/lib/cuid"
 
 const payloadSchema = z.object({
   websiteName: z.string().min(1),
@@ -25,10 +26,13 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const latest = await prisma.myCompanyInfo.findFirst({
-      where: { userId: session.user.id },
-      orderBy: { createdAt: "desc" },
-    })
+    const { data: latest } = await supabaseAdmin
+      .from('my_company_info')
+      .select('*')
+      .eq('userId', session.user.id)
+      .order('createdAt', { ascending: false })
+      .limit(1)
+      .single()
 
     return NextResponse.json(latest ?? null, { status: 200 })
   } catch (error) {
@@ -52,45 +56,60 @@ export async function POST(request: Request) {
 
     const d = parsed.data
 
-    const latest = await prisma.myCompanyInfo.findFirst({
-      where: { userId: session.user.id },
-      orderBy: { createdAt: "desc" },
-    })
+    const { data: latest } = await supabaseAdmin
+      .from('my_company_info')
+      .select('id')
+      .eq('userId', session.user.id)
+      .order('createdAt', { ascending: false })
+      .limit(1)
+      .single()
 
-    const saved = latest
-      ? await prisma.myCompanyInfo.update({
-          where: { id: latest.id },
-          data: {
-            websiteName: d.websiteName,
-            websiteUrl: d.websiteUrl,
-            companyName: d.companyName ?? null,
-            companyType: d.companyType ?? null,
-            industryExpertise: d.industryExpertise ?? undefined,
-            fullTechSummary: d.fullTechSummary ?? undefined,
-            serviceCatalog: d.serviceCatalog ?? undefined,
-            theHook: d.theHook ?? null,
-            whatTheyDo: d.whatTheyDo ?? null,
-            valueProposition: d.valueProposition ?? null,
-            brandTone: d.brandTone ?? undefined,
-          },
+    let saved
+    if (latest) {
+      const { data } = await supabaseAdmin
+        .from('my_company_info')
+        .update({
+          websiteName: d.websiteName,
+          websiteUrl: d.websiteUrl,
+          companyName: d.companyName ?? null,
+          companyType: d.companyType ?? null,
+          industryExpertise: d.industryExpertise ?? undefined,
+          fullTechSummary: d.fullTechSummary ?? undefined,
+          serviceCatalog: d.serviceCatalog ?? undefined,
+          theHook: d.theHook ?? null,
+          whatTheyDo: d.whatTheyDo ?? null,
+          valueProposition: d.valueProposition ?? null,
+          brandTone: d.brandTone ?? undefined,
+          updatedAt: new Date().toISOString(),
         })
-      : await prisma.myCompanyInfo.create({
-          data: {
-            userId: session.user.id,
-            websiteName: d.websiteName,
-            websiteUrl: d.websiteUrl,
-
-            companyName: d.companyName ?? null,
-            companyType: d.companyType ?? null,
-            industryExpertise: d.industryExpertise ?? undefined,
-            fullTechSummary: d.fullTechSummary ?? undefined,
-            serviceCatalog: d.serviceCatalog ?? undefined,
-            theHook: d.theHook ?? null,
-            whatTheyDo: d.whatTheyDo ?? null,
-            valueProposition: d.valueProposition ?? null,
-            brandTone: d.brandTone ?? undefined,
-          },
+        .eq('id', latest.id)
+        .select()
+        .single()
+      saved = data
+    } else {
+      const { data } = await supabaseAdmin
+        .from('my_company_info')
+        .insert({
+          id: generateId(),
+          userId: session.user.id,
+          websiteName: d.websiteName,
+          websiteUrl: d.websiteUrl,
+          companyName: d.companyName ?? null,
+          companyType: d.companyType ?? null,
+          industryExpertise: d.industryExpertise ?? undefined,
+          fullTechSummary: d.fullTechSummary ?? undefined,
+          serviceCatalog: d.serviceCatalog ?? undefined,
+          theHook: d.theHook ?? null,
+          whatTheyDo: d.whatTheyDo ?? null,
+          valueProposition: d.valueProposition ?? null,
+          brandTone: d.brandTone ?? undefined,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
         })
+        .select()
+        .single()
+      saved = data
+    }
 
     return NextResponse.json(saved, { status: latest ? 200 : 201 })
   } catch (error) {

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
+import { supabaseAdmin } from "@/lib/supabase-server"
+import { generateId } from "@/lib/cuid"
 
 export async function POST(request: Request) {
   try {
@@ -23,15 +24,12 @@ export async function POST(request: Request) {
       const rawSignatureId = body.signatureId.trim()
 
       if (rawSignatureId) {
-        const signature = await prisma.signature.findFirst({
-          where: {
-            id: rawSignatureId,
-            userId: session.user.id,
-          },
-          select: {
-            id: true,
-          },
-        })
+        const { data: signature } = await supabaseAdmin
+          .from('signatures')
+          .select('id')
+          .eq('id', rawSignatureId)
+          .eq('userId', session.user.id)
+          .single()
 
         if (!signature) {
           return NextResponse.json(
@@ -44,31 +42,29 @@ export async function POST(request: Request) {
       }
     }
 
-    await prisma.leadFile.create({
-      data: {
+    await supabaseAdmin
+      .from('LeadFile')
+      .insert({
+        id: generateId(),
         userId: session.user.id,
         fileName,
         ...(signatureId ? { signatureId } : {}),
-      },
-    })
+        uploadedAt: new Date().toISOString(),
+      })
 
-    const leadFiles = await prisma.leadFile.findMany({
-      where: { userId: session.user.id },
-      orderBy: { uploadedAt: "desc" },
-      select: {
-        id: true,
-        fileName: true,
-        uploadedAt: true,
-        signature: {
-          select: {
-            name: true,
-          },
-        },
-      },
-    })
+    const { data: leadFiles } = await supabaseAdmin
+      .from('LeadFile')
+      .select(`
+        id,
+        fileName,
+        uploadedAt,
+        signature:signatures(name)
+      `)
+      .eq('userId', session.user.id)
+      .order('uploadedAt', { ascending: false })
 
     return NextResponse.json(
-      leadFiles.map((file) => ({
+      (leadFiles || []).map((file: any) => ({
         id: file.id,
         fileName: file.fileName,
         uploadedAt: file.uploadedAt,

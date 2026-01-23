@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server"
-import { prisma } from "@/lib/prisma"
+import { supabaseAdmin } from "@/lib/supabase-server"
 import { z } from "zod"
 import { sendEmail, getPasswordResetEmailHtml } from "@/lib/email"
 import crypto from "crypto"
+import { generateId } from "@/lib/cuid"
 
 const forgotPasswordSchema = z.object({
   email: z.string().email(),
@@ -23,9 +24,11 @@ export async function POST(request: Request) {
     const email = parsed.data.email.trim().toLowerCase()
 
     // Find user by email
-    const user = await prisma.user.findUnique({
-      where: { email },
-    })
+    const { data: user } = await supabaseAdmin
+      .from('User')
+      .select('id, email')
+      .eq('email', email)
+      .single()
 
     // Always return success to prevent email enumeration
     // But only send email if user exists
@@ -36,18 +39,21 @@ export async function POST(request: Request) {
       expires.setHours(expires.getHours() + 1) // Token expires in 1 hour
 
       // Delete any existing reset tokens for this user
-      await prisma.passwordResetToken.deleteMany({
-        where: { userId: user.id },
-      })
+      await supabaseAdmin
+        .from('PasswordResetToken')
+        .delete()
+        .eq('userId', user.id)
 
       // Create new reset token
-      await prisma.passwordResetToken.create({
-        data: {
+      await supabaseAdmin
+        .from('PasswordResetToken')
+        .insert({
+          id: generateId(),
           userId: user.id,
           token,
-          expires,
-        },
-      })
+          expires: expires.toISOString(),
+          createdAt: new Date().toISOString(),
+        })
 
       // Generate reset URL
       const appUrl = process.env.APP_URL || process.env.AUTH_URL || "http://localhost:3000"

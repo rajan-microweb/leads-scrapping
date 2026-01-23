@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
+import { supabaseAdmin } from "@/lib/supabase-server"
 
 const bodySchema = z.object({
   userId: z.string().min(1),
@@ -37,17 +37,23 @@ export async function POST(request: Request) {
       )
     }
 
-    const updated = await prisma.user.update({
-      where: { id: userId },
-      data: { role },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        createdAt: true,
-      },
-    })
+    const { data: updated, error } = await supabaseAdmin
+      .from('User')
+      .update({
+        role,
+        updatedAt: new Date().toISOString(),
+      })
+      .eq('id', userId)
+      .select('id, name, email, role, "createdAt"')
+      .single()
+
+    if (error) {
+      console.error("users/role POST error:", error)
+      return NextResponse.json(
+        { error: "Internal server error" },
+        { status: 500 },
+      )
+    }
 
     return NextResponse.json(
       {
@@ -55,7 +61,7 @@ export async function POST(request: Request) {
         name: updated.name,
         email: updated.email,
         role: updated.role,
-        createdAt: updated.createdAt.toISOString(),
+        createdAt: new Date(updated.createdAt).toISOString(),
       },
       { status: 200 },
     )

@@ -9,7 +9,7 @@ export default function Home() {
         <CardHeader>
           <CardTitle className="text-2xl font-bold">Welcome</CardTitle>
           <CardDescription>
-            Full-stack application with Next.js 14, Prisma, and NextAuth
+            Full-stack application with Next.js 14, Supabase, and NextAuth
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

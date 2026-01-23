@@ -6,7 +6,7 @@ A production-ready full-stack application built with modern technologies.
 
 - **Frontend**: Next.js 14 (App Router), React 18, TypeScript, Tailwind CSS, ShadCN/UI
 - **Backend**: Next.js API Routes (App Router), TypeScript
-- **Database**: PostgreSQL with Prisma ORM
+- **Database**: Supabase (hosted PostgreSQL) using the Supabase JS client
 - **Authentication**: NextAuth v5 (Auth.js)
 
 ## Getting Started
@@ -14,7 +14,7 @@ A production-ready full-stack application built with modern technologies.
 ### Prerequisites
 
 - Node.js 18+ and npm/yarn/pnpm
-- PostgreSQL database
+- Supabase project (free tier is fine)
 
 ### Installation
 
@@ -38,9 +38,12 @@ pnpm install
 cp .env.example .env
 ```
 
-Edit `.env` and add your database URL and NextAuth secret:
+Edit `.env` and add your Supabase database URL and NextAuth secret:
 ```env
-DATABASE_URL="postgresql://user:password@localhost:5432/leads_scrapping?schema=public"
+NEXT_PUBLIC_SUPABASE_URL="https://your-project-ref.supabase.co"
+NEXT_PUBLIC_SUPABASE_ANON_KEY="your-anon-key-here"
+SUPABASE_SERVICE_ROLE_KEY="your-service-role-key-here"
+DATABASE_URL="postgresql://postgres:YOUR_PASSWORD@db.your-project-ref.supabase.co:5432/postgres"
 AUTH_SECRET="your-secret-key-here"
 AUTH_URL="http://localhost:3000"
 ```
@@ -51,16 +54,8 @@ openssl rand -base64 32
 ```
 
 4. Set up the database:
-```bash
-# Generate Prisma Client
-npm run db:generate
 
-# Push schema to database
-npm run db:push
-
-# Or run migrations
-npm run db:migrate
-```
+- Run the SQL schema from `SUPABASE-MIGRATION-COMPLETE.md` in the Supabase SQL editor
 
 5. Run the development server:
 ```bash
@@ -72,8 +67,6 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 ## Project Structure
 
 ```
-├── prisma/
-│   └── schema.prisma          # Prisma schema
 ├── src/
 │   ├── app/                    # Next.js App Router
 │   │   ├── api/                # API routes
@@ -85,8 +78,9 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 │   ├── components/
 │   │   └── ui/                 # ShadCN/UI components
 │   ├── lib/
-│   │   ├── auth.ts             # NextAuth configuration
-│   │   ├── prisma.ts           # Prisma client
+│   │   ├── auth.ts             # NextAuth configuration (Supabase adapter)
+│   │   ├── supabase.ts         # Supabase client (browser)
+│   │   ├── supabase-server.ts  # Supabase admin client (server)
 │   │   └── utils.ts            # Utility functions
 │   ├── store/                  # State management
 │   └── types/                  # TypeScript types
@@ -103,16 +97,12 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 - `npm run build` - Build for production
 - `npm run start` - Start production server
 - `npm run lint` - Run ESLint
-- `npm run db:generate` - Generate Prisma Client
-- `npm run db:push` - Push schema changes to database
-- `npm run db:migrate` - Run database migrations
-- `npm run db:studio` - Open Prisma Studio
 
 ## Features
 
 - ✅ User authentication (Sign in/Sign up)
 - ✅ Protected routes
-- ✅ Database integration with Prisma
+- ✅ Database integration via Supabase
 - ✅ Modern UI with ShadCN/UI components
 - ✅ TypeScript for type safety
 - ✅ Responsive design with Tailwind CSS

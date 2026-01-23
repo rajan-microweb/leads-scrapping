@@ -1,5 +1,5 @@
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
+import { supabaseAdmin } from "@/lib/supabase-server"
 import { ProfileForm } from "./profile-form"
 
 export const dynamic = "force-dynamic"
@@ -13,29 +13,28 @@ export default async function ProfilePage() {
     return null
   }
 
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: {
-      name: true,
-      fullName: true,
-      email: true,
-      phone: true,
-      country: true,
-      image: true,
-      avatarUrl: true,
-    },
-  })
+  const { data: user } = await supabaseAdmin
+    .from('User')
+    .select('name, "fullName", email, phone, country, image, "avatarUrl"')
+    .eq('id', userId)
+    .single()
 
   // Prefer data from myCompanyInfo (user-editable), fall back to last websiteSubmission
-  const myCompany = await prisma.myCompanyInfo.findFirst({
-    where: { userId },
-    orderBy: { createdAt: "desc" },
-  })
+  const { data: myCompany } = await supabaseAdmin
+    .from('my_company_info')
+    .select('*')
+    .eq('userId', userId)
+    .order('createdAt', { ascending: false })
+    .limit(1)
+    .single()
 
-  const latestSubmission = await prisma.websiteSubmission.findFirst({
-    where: { userId },
-    orderBy: { createdAt: "desc" },
-  })
+  const { data: latestSubmission } = await supabaseAdmin
+    .from('WebsiteSubmission')
+    .select('*')
+    .eq('userId', userId)
+    .order('createdAt', { ascending: false })
+    .limit(1)
+    .single()
 
   let initialWebsiteName: string | null = null
   let initialWebsiteUrl: string | null = null

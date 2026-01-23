@@ -14,24 +14,17 @@ cp env.example .env
 ```
 
 2. Edit `.env` and configure:
-   - `DATABASE_URL`: Your PostgreSQL connection string
+   - `NEXT_PUBLIC_SUPABASE_URL`: Your Supabase project URL
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`: Your Supabase anon key
+   - `SUPABASE_SERVICE_ROLE_KEY`: Your Supabase service role key (keep secret)
+   - `DATABASE_URL`: Your Supabase Postgres connection string
    - `AUTH_SECRET`: Generate with `openssl rand -base64 32`
    - `AUTH_URL`: Your application URL (default: `http://localhost:3000`)
 
 ## Step 3: Set Up Database
 
-1. Make sure PostgreSQL is running
-2. Run Prisma migrations:
-```bash
-npm run db:push
-# or for production
-npm run db:migrate
-```
-
-3. Generate Prisma Client:
-```bash
-npm run db:generate
-```
+1. In Supabase, open the **SQL Editor**
+2. Run the schema from `SUPABASE-MIGRATION-COMPLETE.md` to create all tables
 
 ## Step 4: Run Development Server
 
@@ -62,15 +55,10 @@ src/
 - `npm run build` - Build for production
 - `npm run start` - Start production server
 - `npm run lint` - Run ESLint
-- `npm run db:generate` - Generate Prisma Client
-- `npm run db:push` - Push schema to database
-- `npm run db:migrate` - Run database migrations
-- `npm run db:studio` - Open Prisma Studio
 
 ## Next Steps
 
 1. Customize the authentication flow if needed
 2. Add your business logic and features
-3. Extend the database schema in `prisma/schema.prisma`
-4. Add more ShadCN/UI components as needed
-5. Configure additional NextAuth providers if required
+3. Add more ShadCN/UI components as needed
+4. Configure additional NextAuth providers if required
