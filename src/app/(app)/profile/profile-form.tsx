@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useMemo, useState, useRef } from "react"
 import { useForm } from "react-hook-form"
 import { z } from "zod"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
+import { AvatarCropperModal } from "@/components/avatar-cropper-modal"
 
 type CompanyIntelligence = {
   company_name?: string | null
@@ -72,8 +73,10 @@ export function ProfileForm({
   const [avatarPreview, setAvatarPreview] = useState<string | null>(
     initialUser.profileImageUrl ?? null
   )
-  const [avatarFile, setAvatarFile] = useState<File | null>(null)
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false)
+  const [cropperOpen, setCropperOpen] = useState(false)
+  const [cropperImageSrc, setCropperImageSrc] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const defaultIndustryExpertise = useMemo(() => {
     const v = initialCompanyIntelligence?.industry_expertise
@@ -128,24 +131,24 @@ export function ProfileForm({
         setError("Image size must be less than 5MB")
         return
       }
-      setAvatarFile(file)
+      // Open cropper modal with the selected image
       const reader = new FileReader()
       reader.onloadend = () => {
-        setAvatarPreview(reader.result as string)
+        setCropperImageSrc(reader.result as string)
+        setCropperOpen(true)
       }
       reader.readAsDataURL(file)
     }
   }
 
-  const handleAvatarUpload = async () => {
-    if (!avatarFile) return
-
+  const handleCroppedImage = async (croppedFile: File) => {
     setIsUploadingAvatar(true)
     setError(null)
+    setSuccess(null)
 
     try {
       const formData = new FormData()
-      formData.append("avatar", avatarFile)
+      formData.append("avatar", croppedFile)
 
       const res = await fetch("/api/profile/upload-avatar", {
         method: "POST",
@@ -157,8 +160,24 @@ export function ProfileForm({
         throw new Error(json?.error || "Failed to upload avatar")
       }
 
+      // Update preview with the new avatar URL
+      if (json.avatarUrl) {
+        setAvatarPreview(json.avatarUrl)
+      } else {
+        // Fallback: create preview from cropped file
+        const reader = new FileReader()
+        reader.onloadend = () => {
+          setAvatarPreview(reader.result as string)
+        }
+        reader.readAsDataURL(croppedFile)
+      }
+
       setSuccess("Profile picture updated successfully.")
-      setAvatarFile(null)
+      
+      // Reset file input so user can upload again if needed
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ""
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to upload avatar")
     } finally {
@@ -368,22 +387,16 @@ export function ProfileForm({
               )}
               <div className="flex-1 space-y-2">
                 <Input
+                  ref={fileInputRef}
                   id="avatar"
                   type="file"
                   accept="image/*"
                   onChange={handleAvatarChange}
                   disabled={isUploadingAvatar || isSaving}
                 />
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    onClick={handleAvatarUpload}
-                    disabled={!avatarFile || isUploadingAvatar || isSaving}
-                    size="sm"
-                  >
-                    {isUploadingAvatar ? "Uploading..." : "Upload Avatar"}
-                  </Button>
-                </div>
+                {isUploadingAvatar && (
+                  <p className="text-sm text-muted-foreground">Uploading...</p>
+                )}
                 <p className="text-xs text-muted-foreground">
                   Upload a profile picture (max 5MB). Supported formats: JPG, PNG, GIF, etc.
                 </p>
@@ -537,6 +550,22 @@ export function ProfileForm({
           </Button>
         </div>
       </div>
+
+      {/* Avatar Cropper Modal */}
+      {cropperImageSrc && (
+        <AvatarCropperModal
+          open={cropperOpen}
+          onOpenChange={(isOpen) => {
+            setCropperOpen(isOpen)
+            if (!isOpen) {
+              // Clear the image source when modal closes
+              setCropperImageSrc(null)
+            }
+          }}
+          imageSrc={cropperImageSrc}
+          onCropComplete={handleCroppedImage}
+        />
+      )}
     </form>
   )
 }

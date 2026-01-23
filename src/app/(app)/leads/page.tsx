@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 import { Clock, FileSpreadsheet, UploadCloud, Plus } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -11,6 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogFooter,
 } from "@/components/ui/dialog"
 import {
   Table,
@@ -42,6 +44,7 @@ type Signature = {
 const ALLOWED_EXTENSIONS = [".xlsx", ".xls", ".csv"]
 
 export default function LeadsPage() {
+  const router = useRouter()
   const [leadFiles, setLeadFiles] = useState<LeadFile[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -55,6 +58,10 @@ export default function LeadsPage() {
   const [signaturesLoading, setSignaturesLoading] = useState(true)
   const [signaturesError, setSignaturesError] = useState<string | null>(null)
   const [selectedSignatureId, setSelectedSignatureId] = useState<string>("")
+  const [isOutlookConnected, setIsOutlookConnected] = useState<boolean | null>(null)
+  const [isCheckingOutlook, setIsCheckingOutlook] = useState(true)
+  const [createLeadsDialogOpen, setCreateLeadsDialogOpen] = useState(false)
+  const [connectAccountDialogOpen, setConnectAccountDialogOpen] = useState(false)
 
   const pageSize = 10
 
@@ -151,6 +158,48 @@ export default function LeadsPage() {
     }
   }, [])
 
+  // Check Outlook integration status on mount
+  useEffect(() => {
+    let isMounted = true
+
+    const checkOutlookIntegration = async () => {
+      try {
+        setIsCheckingOutlook(true)
+        const response = await fetch("/api/integrations")
+        
+        if (!response.ok) {
+          throw new Error("Failed to check integration status")
+        }
+
+        const integrations = await response.json()
+        const outlookIntegration = integrations.find(
+          (int: { platformName: string; isConnected: boolean }) =>
+            int.platformName === "outlook" && int.isConnected
+        )
+
+        if (isMounted) {
+          setIsOutlookConnected(!!outlookIntegration)
+        }
+      } catch (err) {
+        console.error("Failed to check Outlook integration:", err)
+        if (isMounted) {
+          // On error, assume not connected to be safe
+          setIsOutlookConnected(false)
+        }
+      } finally {
+        if (isMounted) {
+          setIsCheckingOutlook(false)
+        }
+      }
+    }
+
+    void checkOutlookIntegration()
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
   // Reset to first page whenever the list changes
   useEffect(() => {
     setCurrentPage(1)
@@ -170,6 +219,29 @@ export default function LeadsPage() {
     return fileName.substring(dotIndex + 1).toUpperCase()
   }
 
+  const handleCreateLeadsClick = () => {
+    // If still checking, don't do anything
+    if (isCheckingOutlook) {
+      return
+    }
+
+    // If Outlook is not connected, show connect account modal
+    if (isOutlookConnected === false) {
+      setConnectAccountDialogOpen(true)
+      return
+    }
+
+    // If Outlook is connected, open the create leads dialog
+    if (isOutlookConnected === true) {
+      setCreateLeadsDialogOpen(true)
+    }
+  }
+
+  const handleConnectAccount = () => {
+    setConnectAccountDialogOpen(false)
+    router.push("/integrations")
+  }
+
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -181,14 +253,43 @@ export default function LeadsPage() {
           </p>
         </div>
 
-        <Dialog>
-          <DialogTrigger asChild>
-            <Button className="gap-2">
-              <Plus className="h-4 w-4" />
-              Create Leads
+        <Button 
+          className="gap-2" 
+          onClick={handleCreateLeadsClick}
+          disabled={isCheckingOutlook}
+        >
+          <Plus className="h-4 w-4" />
+          Create Leads
+        </Button>
+      </div>
+
+      {/* Connect Account Modal */}
+      <Dialog open={connectAccountDialogOpen} onOpenChange={setConnectAccountDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Connect Your Outlook Account</DialogTitle>
+            <DialogDescription>
+              Connect your Outlook account to continue
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setConnectAccountDialogOpen(false)}
+            >
+              Cancel
             </Button>
-          </DialogTrigger>
-          <DialogContent>
+            <Button type="button" onClick={handleConnectAccount}>
+              Connect Account
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Leads Modal */}
+      <Dialog open={createLeadsDialogOpen} onOpenChange={setCreateLeadsDialogOpen}>
+        <DialogContent>
             <DialogHeader>
               <DialogTitle>Create leads</DialogTitle>
               <DialogDescription>
@@ -312,6 +413,8 @@ export default function LeadsPage() {
                   setSelectedSignatureId("")
                   // Reset file input so the user can re-upload (including the same file name)
                   setFileInputKey((k) => k + 1)
+                  // Close the dialog after successful upload
+                  setCreateLeadsDialogOpen(false)
                 } catch (err) {
                   setUploadError(
                     err instanceof Error
