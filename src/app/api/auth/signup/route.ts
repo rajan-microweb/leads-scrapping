@@ -60,6 +60,9 @@ export async function POST(request: Request) {
         fullName: name,
         email,
         password: hashedPassword,
+        // Mark email as verified on signup for now. If you later add a real
+        // email verification flow, this should be moved to the verification step.
+        emailVerified: new Date().toISOString(),
         role: 'CLIENT',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
