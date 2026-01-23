@@ -64,7 +64,10 @@ export default async function AppLayout({
             <form
               action={async () => {
                 "use server"
-                await signOut({ redirectTo: "/" })
+                // Sign out the user and send them back to the dedicated auth page.
+                // Using an explicit auth route avoids any accidental redirects that
+                // could look like an automatic login in production.
+                await signOut({ redirectTo: "/auth/signin" })
               }}
             >
               <Button type="submit" variant="outline" size="sm">

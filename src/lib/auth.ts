@@ -40,12 +40,19 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
         // Query user from Supabase
         const { data: user, error } = await supabaseAdmin
-          .from('User')
-          .select('*')
-          .eq('email', email)
+          .from("User")
+          .select("*")
+          .eq("email", email)
           .single()
 
+        // Fail if user lookup failed or password is missing
         if (error || !user || !user.password) {
+          return null
+        }
+
+        // Enforce that only verified users can log in when the column exists.
+        // `emailVerified` is a TIMESTAMP column; null/undefined means not verified.
+        if (!user.emailVerified) {
           return null
         }
 
