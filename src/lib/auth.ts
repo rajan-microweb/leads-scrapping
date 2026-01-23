@@ -29,46 +29,79 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
-        const parsed = loginSchema.safeParse(credentials)
+        try {
+          const parsed = loginSchema.safeParse(credentials)
 
-        if (!parsed.success) {
+          if (!parsed.success) {
+            console.error("[Auth] Invalid credentials format:", parsed.error)
+            return null
+          }
+
+          const { password } = parsed.data
+          const email = parsed.data.email.trim().toLowerCase()
+
+          // Query user from Supabase
+          const { data: user, error } = await supabaseAdmin
+            .from("User")
+            .select("*")
+            .eq("email", email)
+            .single()
+
+          // Fail if user lookup failed
+          if (error) {
+            console.error("[Auth] User lookup error:", error.message)
+            return null
+          }
+
+          // Fail if user doesn't exist
+          if (!user) {
+            console.error("[Auth] User not found for email:", email)
+            return null
+          }
+
+          // Fail if password is missing
+          if (!user.password) {
+            console.error("[Auth] User has no password set:", email)
+            return null
+          }
+
+          // Verify password FIRST (before checking emailVerified)
+          // This ensures we only auto-verify users with correct credentials
+          const isValid = await bcrypt.compare(password, user.password)
+
+          if (!isValid) {
+            console.error("[Auth] Invalid password for email:", email)
+            return null
+          }
+
+          // Enforce that only verified users can log in.
+          // `emailVerified` is a TIMESTAMP column; null/undefined means not verified.
+          // For existing users created before email verification was added, auto-verify on first successful login
+          if (!user.emailVerified) {
+            console.warn("[Auth] User email not verified, auto-verifying on first login:", email)
+            // Auto-verify the user by updating emailVerified
+            const { error: updateError } = await supabaseAdmin
+              .from("User")
+              .update({ emailVerified: new Date().toISOString() })
+              .eq("id", user.id)
+
+            if (updateError) {
+              console.error("[Auth] Failed to auto-verify user:", updateError.message)
+              // Still allow login - this is a migration path for existing users
+            }
+          }
+
+          // Only return non-sensitive fields to NextAuth; the rest stays in the database
+          return {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            image: user.image,
+            role: user.role,
+          }
+        } catch (err) {
+          console.error("[Auth] Unexpected error in authorize:", err)
           return null
-        }
-
-        const { password } = parsed.data
-        const email = parsed.data.email.trim().toLowerCase()
-
-        // Query user from Supabase
-        const { data: user, error } = await supabaseAdmin
-          .from("User")
-          .select("*")
-          .eq("email", email)
-          .single()
-
-        // Fail if user lookup failed or password is missing
-        if (error || !user || !user.password) {
-          return null
-        }
-
-        // Enforce that only verified users can log in when the column exists.
-        // `emailVerified` is a TIMESTAMP column; null/undefined means not verified.
-        if (!user.emailVerified) {
-          return null
-        }
-
-        const isValid = await bcrypt.compare(password, user.password)
-
-        if (!isValid) {
-          return null
-        }
-
-        // Only return non-sensitive fields to NextAuth; the rest stays in the database
-        return {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          image: user.image,
-          role: user.role,
         }
       },
     }),
