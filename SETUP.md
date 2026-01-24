@@ -26,7 +26,35 @@ cp env.example .env
 1. In Supabase, open the **SQL Editor**
 2. Run the schema from `SUPABASE-MIGRATION-COMPLETE.md` to create all tables
 
-## Step 4: Run Development Server
+## Step 4: Set Up Supabase Storage
+
+1. In Supabase Dashboard, go to **Storage**
+2. Create a new bucket named `signatures`:
+   - Click **"New bucket"**
+   - Name: `signatures`
+   - Public bucket: **Yes** (so images can be accessed via public URLs)
+   - File size limit: 5MB (or your preferred limit)
+   - Allowed MIME types: `image/*` (or leave empty for all types)
+3. Set up Storage Policies (optional but recommended):
+   - Go to **Storage** → **Policies** for the `signatures` bucket
+   - Create a policy to allow authenticated users to upload to their own folder:
+     - Policy name: "Users can upload to their own folder"
+     - Allowed operation: INSERT
+     - Policy definition:
+       ```sql
+       (bucket_id = 'signatures'::text) AND ((storage.foldername(name))[1] = (auth.uid())::text)
+       ```
+   - Create a policy to allow public read access:
+     - Policy name: "Public read access"
+     - Allowed operation: SELECT
+     - Policy definition:
+       ```sql
+       (bucket_id = 'signatures'::text)
+       ```
+
+Note: The application uses the service role key for uploads (server-side), so RLS policies are bypassed. However, the API route ensures users can only upload to their own folder by using `session.user.id`.
+
+## Step 5: Run Development Server
 
 ```bash
 npm run dev

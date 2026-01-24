@@ -66,10 +66,9 @@ export function AddSignatureModal({
     }
   }, [])
 
-  // Simple base64 upload adapter for CKEditor images.
-  // This keeps uploaded images embedded directly in the HTML,
-  // so they are stored and rendered correctly from the `content` field.
-  const createBase64UploadAdapter = (loader: any) => {
+  // Supabase Storage upload adapter for CKEditor images.
+  // Uploads images to Supabase Storage and returns the public URL.
+  const createSupabaseUploadAdapter = (loader: any) => {
     return {
       loader,
       // Called by CKEditor when the file should be uploaded.
@@ -80,23 +79,41 @@ export function AddSignatureModal({
           return Promise.reject("No file to upload")
         }
 
-        return new Promise((resolve, reject) => {
-          const reader = new FileReader()
-          reader.onload = () => {
-            resolve({
-              // CKEditor expects an object with the `default` URL.
-              default: reader.result as string,
-            })
+        try {
+          // Upload to Supabase Storage via API route
+          const formData = new FormData()
+          formData.append("image", file)
+
+          const response = await fetch("/api/signatures/upload-image", {
+            method: "POST",
+            body: formData,
+          })
+
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}))
+            throw new Error(errorData?.error || "Failed to upload image")
           }
-          reader.onerror = (error) => {
-            reject(error)
+
+          const data = await response.json()
+
+          if (!data.url) {
+            throw new Error("No URL returned from upload")
           }
-          reader.readAsDataURL(file)
-        })
+
+          // CKEditor expects an object with the `default` URL.
+          return {
+            default: data.url,
+          }
+        } catch (error) {
+          console.error("Image upload error:", error)
+          return Promise.reject(
+            error instanceof Error ? error.message : "Failed to upload image"
+          )
+        }
       },
       // Called by CKEditor if the upload is aborted.
       abort() {
-        // No special abort handling needed for FileReader.
+        // No special abort handling needed for fetch.
       },
     }
   }
@@ -324,11 +341,11 @@ export function AddSignatureModal({
                     onReady={(editor: any) => {
                       editorRef.current = editor
                       // Configure a custom upload adapter so image uploads work
-                      // and are embedded as base64 data URLs in the HTML.
+                      // and are uploaded to Supabase Storage, returning public URLs.
                       const fileRepository = editor.plugins.get("FileRepository")
                       if (fileRepository) {
                         fileRepository.createUploadAdapter = (loader: any) =>
-                          createBase64UploadAdapter(loader)
+                          createSupabaseUploadAdapter(loader)
                       }
 
                       // Intercept link command execution to show custom dialog
