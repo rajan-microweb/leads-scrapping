@@ -1,7 +1,13 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
-import { Editor } from "@tinymce/tinymce-react"
+import { useEffect, useState } from "react"
+import { useEditor, EditorContent } from "@tiptap/react"
+import StarterKit from "@tiptap/starter-kit"
+import TextAlign from "@tiptap/extension-text-align"
+import Underline from "@tiptap/extension-underline"
+import Link from "@tiptap/extension-link"
+import Image from "@tiptap/extension-image"
+import FileHandler from "@tiptap/extension-file-handler"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -13,6 +19,21 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import {
+  Bold,
+  Italic,
+  Underline as UnderlineIcon,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+  List,
+  ListOrdered,
+  Link as LinkIcon,
+  Image as ImageIcon,
+  Undo,
+  Redo,
+  RemoveFormatting,
+} from "lucide-react"
 
 type AddSignatureModalProps = {
   open: boolean
@@ -29,7 +50,139 @@ export function AddSignatureModal({
   const [content, setContent] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const editorRef = useRef<any>(null)
+
+  // Handle image upload to Supabase Storage
+  const uploadImage = async (file: File): Promise<string> => {
+    // Validate file type
+    if (!file.type.startsWith("image/")) {
+      throw new Error("File must be an image")
+    }
+
+    // Validate file size (max 5MB)
+    const maxSize = 5 * 1024 * 1024
+    if (file.size > maxSize) {
+      throw new Error("File size must be less than 5MB")
+    }
+
+    const formData = new FormData()
+    formData.append("image", file)
+
+    const response = await fetch("/api/signatures/upload-image", {
+      method: "POST",
+      body: formData,
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData?.error || "Failed to upload image")
+    }
+
+    const data = await response.json()
+
+    if (!data.url) {
+      throw new Error("No URL returned from upload")
+    }
+
+    return data.url
+  }
+
+  // Convert file to base64 for immediate preview
+  const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result as string)
+      reader.onerror = reject
+      reader.readAsDataURL(file)
+    })
+  }
+
+  // Helper function to replace image src in editor
+  const replaceImageSrc = (editorInstance: any, oldSrc: string, newSrc: string) => {
+    const { tr } = editorInstance.state
+    let found = false
+    editorInstance.state.doc.descendants((node: any, pos: number) => {
+      if (node.type.name === "image" && node.attrs.src === oldSrc && !found) {
+        tr.setNodeMarkup(pos, undefined, { ...node.attrs, src: newSrc })
+        found = true
+        return false
+      }
+    })
+    if (found) {
+      editorInstance.view.dispatch(tr)
+    }
+  }
+
+  // Tiptap editor instance
+  const editor = useEditor({
+    extensions: [
+      StarterKit.configure({
+        // Disable default heading to allow custom styling
+      }),
+      TextAlign.configure({
+        types: ["heading", "paragraph"],
+      }),
+      Underline,
+      Link.configure({
+        openOnClick: false,
+        HTMLAttributes: {
+          target: "_blank",
+          rel: "noopener noreferrer",
+        },
+      }),
+      Image.configure({
+        allowBase64: true,
+        HTMLAttributes: {
+          class: "signature-image",
+        },
+      }),
+      FileHandler.configure({
+        allowedMimeTypes: ["image/png", "image/jpeg", "image/jpg", "image/gif", "image/webp"],
+        onDrop: async (editorInstance, files, pos) => {
+          for (const file of files) {
+            try {
+              // Show image immediately as base64
+              const base64 = await fileToBase64(file)
+              editorInstance.chain().focus().setImage({ src: base64 }).run()
+
+              // Upload in background and replace with URL
+              const url = await uploadImage(file)
+              replaceImageSrc(editorInstance, base64, url)
+            } catch (error) {
+              console.error("Image upload error:", error)
+              // Remove the base64 image if upload fails
+              editorInstance.chain().focus().deleteSelection().run()
+            }
+          }
+        },
+        onPaste: async (editorInstance, files, htmlContent) => {
+          for (const file of files) {
+            try {
+              // Show image immediately as base64
+              const base64 = await fileToBase64(file)
+              editorInstance.chain().focus().setImage({ src: base64 }).run()
+
+              // Upload in background and replace with URL
+              const url = await uploadImage(file)
+              replaceImageSrc(editorInstance, base64, url)
+            } catch (error) {
+              console.error("Image upload error:", error)
+              // Remove the base64 image if upload fails
+              editorInstance.chain().focus().deleteSelection().run()
+            }
+          }
+        },
+      }),
+    ],
+    content: content,
+    onUpdate: ({ editor }) => {
+      setContent(editor.getHTML())
+    },
+    editorProps: {
+      attributes: {
+        class: "prose prose-sm sm:prose lg:prose-lg xl:prose-2xl mx-auto focus:outline-none min-h-[280px] px-4 py-2",
+      },
+    },
+  })
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -73,8 +226,8 @@ export function AddSignatureModal({
       // Reset form
       setName("")
       setContent("")
-      if (editorRef.current) {
-        editorRef.current.setContent("")
+      if (editor) {
+        editor.commands.clearContent()
       }
       onOpenChange(false)
       onSuccess()
@@ -90,65 +243,63 @@ export function AddSignatureModal({
       setName("")
       setContent("")
       setError(null)
-      if (editorRef.current) {
-        editorRef.current.setContent("")
+      if (editor) {
+        editor.commands.clearContent()
       }
       onOpenChange(false)
     }
   }
 
-  // Handle image upload to Supabase Storage
-  const handleImageUpload = async (blobInfo: any, progress: (percent: number) => void): Promise<string> => {
-    return new Promise(async (resolve, reject) => {
-      try {
-        const file = blobInfo.blob()
-        
-        // Validate file type
-        if (!file.type.startsWith("image/")) {
-          reject("File must be an image")
-          return
+  // Handle image button click
+  const handleImageButtonClick = () => {
+    const input = document.createElement("input")
+    input.type = "file"
+    input.accept = "image/*"
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0]
+      if (file && editor) {
+        try {
+          // Show image immediately as base64
+          const base64 = await fileToBase64(file)
+          editor.chain().focus().setImage({ src: base64 }).run()
+
+          // Upload in background and replace with URL
+          const url = await uploadImage(file)
+          replaceImageSrc(editor, base64, url)
+        } catch (error) {
+          console.error("Image upload error:", error)
+          alert(error instanceof Error ? error.message : "Failed to upload image")
         }
-
-        // Validate file size (max 5MB)
-        const maxSize = 5 * 1024 * 1024
-        if (file.size > maxSize) {
-          reject("File size must be less than 5MB")
-          return
-        }
-
-        progress(0)
-
-        const formData = new FormData()
-        formData.append("image", file)
-
-        const response = await fetch("/api/signatures/upload-image", {
-          method: "POST",
-          body: formData,
-        })
-
-        progress(50)
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}))
-          reject(errorData?.error || "Failed to upload image")
-          return
-        }
-
-        const data = await response.json()
-
-        if (!data.url) {
-          reject("No URL returned from upload")
-          return
-        }
-
-        progress(100)
-        resolve(data.url)
-      } catch (error) {
-        console.error("Image upload error:", error)
-        reject(error instanceof Error ? error.message : "Failed to upload image")
       }
-    })
+    }
+    input.click()
   }
+
+  // Handle link button click
+  const handleLinkButtonClick = () => {
+    if (!editor) return
+    const url = window.prompt("Enter URL:")
+    if (url) {
+      editor.chain().focus().setLink({ href: url }).run()
+    }
+  }
+
+  // Sync editor content when content prop changes (for reset)
+  useEffect(() => {
+    if (editor && content === "" && editor.getHTML() !== "<p></p>") {
+      editor.commands.clearContent()
+    }
+  }, [content, editor])
+
+  // Reset editor when modal closes
+  useEffect(() => {
+    if (!open && editor) {
+      editor.commands.clearContent()
+      setName("")
+      setContent("")
+      setError(null)
+    }
+  }, [open, editor])
 
   return (
     <Dialog open={open} onOpenChange={(newOpen) => {
@@ -188,65 +339,160 @@ export function AddSignatureModal({
 
             <div className="space-y-2">
               <Label htmlFor="signature-content">Signature Content</Label>
-              <div className="signature-editor-wrapper h-[320px] border rounded-md overflow-hidden">
-                <Editor
-                  apiKey={process.env.NEXT_PUBLIC_TINYMCE_API_KEY || "no-api-key"} // Get free API key from https://www.tiny.cloud/auth/signup/
-                  onInit={(_evt, editor) => {
-                    editorRef.current = editor
-                  }}
-                  value={content}
-                  onEditorChange={(newContent) => {
-                    setContent(newContent)
-                  }}
-                  init={{
-                    height: 320,
-                    menubar: false,
-                    plugins: [
-                      "advlist",
-                      "autolink",
-                      "lists",
-                      "link",
-                      "image",
-                      "charmap",
-                      "preview",
-                      "anchor",
-                      "searchreplace",
-                      "visualblocks",
-                      "code",
-                      "fullscreen",
-                      "insertdatetime",
-                      "media",
-                      "table",
-                      "code",
-                      "help",
-                      "wordcount",
-                    ],
-                    toolbar:
-                      "undo redo | blocks | " +
-                      "bold italic underline | alignleft aligncenter alignright | " +
-                      "bullist numlist | link image | " +
-                      "removeformat | help",
-                    content_style:
-                      "body { font-family:Helvetica,Arial,sans-serif; font-size:14px }",
-                    // Image upload handler
-                    images_upload_handler: handleImageUpload,
-                    // Image alignment options
-                    image_advtab: true,
-                    image_align_toolbar: true,
-                    // Link settings
-                    link_default_target: "_blank",
-                    link_default_protocol: "https",
-                    // Allow all HTML tags needed for signatures
-                    valid_elements: "*[*]",
-                    extended_valid_elements: "*[*]",
-                    // Remove invalid elements
-                    invalid_elements: "script,iframe,object,embed,form",
-                    // Auto-resize
-                    autoresize_bottom_margin: 16,
-                    // Remove branding (optional - for free version)
-                    branding: false,
-                  }}
-                />
+              <div className="signature-editor-wrapper border rounded-md overflow-hidden flex flex-col h-[320px]">
+                {/* Toolbar */}
+                {editor && (
+                  <div className="flex items-center gap-1 p-2 border-b bg-background flex-wrap">
+                    {/* Undo/Redo */}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => editor.chain().focus().undo().run()}
+                      disabled={!editor.can().chain().focus().undo().run()}
+                      className="h-8 w-8 p-0"
+                    >
+                      <Undo className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => editor.chain().focus().redo().run()}
+                      disabled={!editor.can().chain().focus().redo().run()}
+                      className="h-8 w-8 p-0"
+                    >
+                      <Redo className="h-4 w-4" />
+                    </Button>
+
+                    <div className="w-px h-6 bg-border mx-1" />
+
+                    {/* Text Formatting */}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => editor.chain().focus().toggleBold().run()}
+                      disabled={!editor.can().chain().focus().toggleBold().run()}
+                      className={`h-8 w-8 p-0 ${editor.isActive("bold") ? "bg-accent" : ""}`}
+                    >
+                      <Bold className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => editor.chain().focus().toggleItalic().run()}
+                      disabled={!editor.can().chain().focus().toggleItalic().run()}
+                      className={`h-8 w-8 p-0 ${editor.isActive("italic") ? "bg-accent" : ""}`}
+                    >
+                      <Italic className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => editor.chain().focus().toggleUnderline().run()}
+                      disabled={!editor.can().chain().focus().toggleUnderline().run()}
+                      className={`h-8 w-8 p-0 ${editor.isActive("underline") ? "bg-accent" : ""}`}
+                    >
+                      <UnderlineIcon className="h-4 w-4" />
+                    </Button>
+
+                    <div className="w-px h-6 bg-border mx-1" />
+
+                    {/* Text Alignment */}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => editor.chain().focus().setTextAlign("left").run()}
+                      className={`h-8 w-8 p-0 ${editor.isActive({ textAlign: "left" }) ? "bg-accent" : ""}`}
+                    >
+                      <AlignLeft className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => editor.chain().focus().setTextAlign("center").run()}
+                      className={`h-8 w-8 p-0 ${editor.isActive({ textAlign: "center" }) ? "bg-accent" : ""}`}
+                    >
+                      <AlignCenter className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => editor.chain().focus().setTextAlign("right").run()}
+                      className={`h-8 w-8 p-0 ${editor.isActive({ textAlign: "right" }) ? "bg-accent" : ""}`}
+                    >
+                      <AlignRight className="h-4 w-4" />
+                    </Button>
+
+                    <div className="w-px h-6 bg-border mx-1" />
+
+                    {/* Lists */}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => editor.chain().focus().toggleBulletList().run()}
+                      className={`h-8 w-8 p-0 ${editor.isActive("bulletList") ? "bg-accent" : ""}`}
+                    >
+                      <List className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => editor.chain().focus().toggleOrderedList().run()}
+                      className={`h-8 w-8 p-0 ${editor.isActive("orderedList") ? "bg-accent" : ""}`}
+                    >
+                      <ListOrdered className="h-4 w-4" />
+                    </Button>
+
+                    <div className="w-px h-6 bg-border mx-1" />
+
+                    {/* Link & Image */}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleLinkButtonClick}
+                      className={`h-8 w-8 p-0 ${editor.isActive("link") ? "bg-accent" : ""}`}
+                    >
+                      <LinkIcon className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleImageButtonClick}
+                      className="h-8 w-8 p-0"
+                    >
+                      <ImageIcon className="h-4 w-4" />
+                    </Button>
+
+                    <div className="w-px h-6 bg-border mx-1" />
+
+                    {/* Remove Format */}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => editor.chain().focus().clearNodes().unsetAllMarks().run()}
+                      className="h-8 w-8 p-0"
+                    >
+                      <RemoveFormatting className="h-4 w-4" />
+                    </Button>
+                  </div>
+                )}
+
+                {/* Editor Content */}
+                <div className="flex-1 overflow-y-auto">
+                  <EditorContent editor={editor} />
+                </div>
               </div>
             </div>
 
