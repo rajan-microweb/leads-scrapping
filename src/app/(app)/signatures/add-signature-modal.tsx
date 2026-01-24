@@ -34,22 +34,26 @@ import {
   Redo,
   RemoveFormatting,
 } from "lucide-react"
+import type { Signature } from "@/types/signatures"
 
 type AddSignatureModalProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   onSuccess: () => void
+  signature?: Signature | null
 }
 
 export function AddSignatureModal({
   open,
   onOpenChange,
   onSuccess,
+  signature,
 }: AddSignatureModalProps) {
   const [name, setName] = useState("")
   const [content, setContent] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const isEditMode = !!signature
 
   // Handle image upload to Supabase Storage
   const uploadImage = async (file: File): Promise<string> => {
@@ -184,6 +188,24 @@ export function AddSignatureModal({
     },
   })
 
+  // Load signature data when in edit mode
+  useEffect(() => {
+    if (open && signature) {
+      setName(signature.name)
+      setContent(signature.content)
+      if (editor) {
+        editor.commands.setContent(signature.content)
+      }
+    } else if (open && !signature) {
+      // Reset for add mode
+      setName("")
+      setContent("")
+      if (editor) {
+        editor.commands.clearContent()
+      }
+    }
+  }, [open, signature, editor])
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
@@ -201,19 +223,31 @@ export function AddSignatureModal({
     try {
       setIsSubmitting(true)
 
-      const response = await fetch("/api/signatures", {
-        method: "POST",
+      const url = "/api/signatures"
+      const method = isEditMode ? "PUT" : "POST"
+      const body = isEditMode
+        ? {
+            id: signature!.id,
+            name: name.trim(),
+            content: content.trim(),
+          }
+        : {
+            name: name.trim(),
+            content: content.trim(),
+          }
+
+      const response = await fetch(url, {
+        method,
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          name: name.trim(),
-          content: content.trim(),
-        }),
+        body: JSON.stringify(body),
       })
 
       if (!response.ok) {
-        let errorMessage = "Failed to create signature"
+        let errorMessage = isEditMode
+          ? "Failed to update signature"
+          : "Failed to create signature"
         try {
           const errorData = await response.json()
           errorMessage = errorData?.error || errorData?.details || errorMessage
@@ -284,22 +318,15 @@ export function AddSignatureModal({
     }
   }
 
-  // Sync editor content when content prop changes (for reset)
+  // Reset editor when modal closes (only if not in edit mode or closing)
   useEffect(() => {
-    if (editor && content === "" && editor.getHTML() !== "<p></p>") {
-      editor.commands.clearContent()
-    }
-  }, [content, editor])
-
-  // Reset editor when modal closes
-  useEffect(() => {
-    if (!open && editor) {
+    if (!open && editor && !isEditMode) {
       editor.commands.clearContent()
       setName("")
       setContent("")
       setError(null)
     }
-  }, [open, editor])
+  }, [open, editor, isEditMode])
 
   return (
     <Dialog open={open} onOpenChange={(newOpen) => {
@@ -313,9 +340,13 @@ export function AddSignatureModal({
         className="max-w-4xl w-[95vw] md:max-w-5xl max-h-[90vh] flex flex-col overflow-hidden"
       >
         <DialogHeader>
-          <DialogTitle>Add Email Signature</DialogTitle>
+          <DialogTitle>
+            {isEditMode ? "Edit Email Signature" : "Add Email Signature"}
+          </DialogTitle>
           <DialogDescription>
-            Create a new email signature. Use the editor to format your text, add links, and customize the appearance.
+            {isEditMode
+              ? "Update your email signature. Use the editor to format your text, add links, and customize the appearance."
+              : "Create a new email signature. Use the editor to format your text, add links, and customize the appearance."}
           </DialogDescription>
         </DialogHeader>
 
@@ -513,7 +544,13 @@ export function AddSignatureModal({
               Cancel
             </Button>
             <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? "Creating..." : "Create Signature"}
+              {isSubmitting
+                ? isEditMode
+                  ? "Updating..."
+                  : "Creating..."
+                : isEditMode
+                  ? "Update Signature"
+                  : "Create Signature"}
             </Button>
           </DialogFooter>
         </form>
