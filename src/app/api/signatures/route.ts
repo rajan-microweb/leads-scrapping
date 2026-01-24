@@ -4,6 +4,17 @@ import { supabaseAdmin } from "@/lib/supabase-server"
 import { sanitizeHtml } from "@/lib/sanitize-html"
 import { generateId } from "@/lib/cuid"
 
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 200,
+    headers: {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    },
+  })
+}
+
 export async function GET() {
   try {
     const session = await auth()
@@ -12,12 +23,11 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    // Try selecting all columns first to avoid column name issues
     const { data: signatures, error } = await supabaseAdmin
       .from('signatures')
-      .select('id, name, content, "createdAt", "updatedAt"')
+      .select('*')
       .eq('userId', session.user.id)
-      // Note: Supabase order() may need unquoted column name for camelCase columns
-      // If this fails, try: .order('updatedAt', { ascending: false })
       .order('updatedAt', { ascending: false })
 
     if (error) {
@@ -31,7 +41,16 @@ export async function GET() {
       )
     }
 
-    return NextResponse.json(signatures || [], { status: 200 })
+    // Map the response to ensure consistent field names
+    const mappedSignatures = (signatures || []).map((sig: any) => ({
+      id: sig.id,
+      name: sig.name,
+      content: sig.content,
+      createdAt: sig.createdAt || sig.createdat || sig['createdAt'],
+      updatedAt: sig.updatedAt || sig.updatedat || sig['updatedAt'],
+    }))
+
+    return NextResponse.json(mappedSignatures, { status: 200 })
   } catch (error) {
     console.error("signatures GET error:", error)
     const errorMessage = error instanceof Error ? error.message : "Unknown error"
@@ -51,7 +70,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const body = await request.json().catch(() => null)
+    let body
+    try {
+      body = await request.json()
+    } catch (error) {
+      console.error("signatures POST JSON parse error:", error)
+      return NextResponse.json(
+        { error: "Invalid JSON in request body" },
+        { status: 400 }
+      )
+    }
 
     if (!body || typeof body.name !== "string" || !body.name.trim()) {
       return NextResponse.json(
@@ -90,7 +118,7 @@ export async function POST(request: Request) {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       })
-      .select('id, name, content, "createdAt", "updatedAt"')
+      .select('*')
       .single()
 
     if (error) {
@@ -104,7 +132,16 @@ export async function POST(request: Request) {
       )
     }
 
-    return NextResponse.json(signature, { status: 201 })
+    // Map the response to ensure consistent field names
+    const mappedSignature = signature ? {
+      id: signature.id,
+      name: signature.name,
+      content: signature.content,
+      createdAt: signature.createdAt || signature.createdat || signature['createdAt'],
+      updatedAt: signature.updatedAt || signature.updatedat || signature['updatedAt'],
+    } : null
+
+    return NextResponse.json(mappedSignature, { status: 201 })
   } catch (error) {
     console.error("signatures POST error:", error)
     return NextResponse.json(

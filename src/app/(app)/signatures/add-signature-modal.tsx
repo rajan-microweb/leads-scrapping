@@ -129,11 +129,19 @@ export function AddSignatureModal({
         }),
       })
 
-      const data = await response.json()
-
       if (!response.ok) {
-        throw new Error(data?.error || "Failed to create signature")
+        let errorMessage = "Failed to create signature"
+        try {
+          const errorData = await response.json()
+          errorMessage = errorData?.error || errorData?.details || errorMessage
+        } catch {
+          // If response is not JSON, use status text
+          errorMessage = response.statusText || errorMessage
+        }
+        throw new Error(errorMessage)
       }
+
+      const data = await response.json()
 
       // Reset form
       setName("")
