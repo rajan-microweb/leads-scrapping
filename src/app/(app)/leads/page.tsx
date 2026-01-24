@@ -62,7 +62,6 @@ export default function LeadsPage() {
   const [isCheckingOutlook, setIsCheckingOutlook] = useState(true)
   const [createLeadsDialogOpen, setCreateLeadsDialogOpen] = useState(false)
   const [connectAccountDialogOpen, setConnectAccountDialogOpen] = useState(false)
-  const [noSignaturesDialogOpen, setNoSignaturesDialogOpen] = useState(false)
 
   const pageSize = 10
 
@@ -227,21 +226,13 @@ export default function LeadsPage() {
     if (isOutlookConnected === true) {
       try {
         // Fetch available signatures for the current user
-        const fetchedSignatures = await loadSignatures()
-
-        // If no signatures are found, show the no signatures modal
-        if (fetchedSignatures.length === 0) {
-          setNoSignaturesDialogOpen(true)
-          return
-        }
-
-        // If signatures exist, open the create leads dialog
-        setCreateLeadsDialogOpen(true)
+        await loadSignatures()
       } catch (err) {
         // If there's an error loading signatures, still allow the user to proceed
         // (they can select "No signature" option)
-        setCreateLeadsDialogOpen(true)
       }
+      // Always open the create leads dialog - it will show empty state if no signatures
+      setCreateLeadsDialogOpen(true)
     }
   }
 
@@ -251,7 +242,7 @@ export default function LeadsPage() {
   }
 
   const handleCreateSignature = () => {
-    setNoSignaturesDialogOpen(false)
+    setCreateLeadsDialogOpen(false)
     router.push("/signatures")
   }
 
@@ -300,30 +291,6 @@ export default function LeadsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* No Signatures Modal */}
-      <Dialog open={noSignaturesDialogOpen} onOpenChange={setNoSignaturesDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>No Signatures Found</DialogTitle>
-            <DialogDescription>
-              No signatures found. Please create a signature to continue.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setNoSignaturesDialogOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button type="button" onClick={handleCreateSignature}>
-              Create Signature
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       {/* Create Leads Modal */}
       <Dialog open={createLeadsDialogOpen} onOpenChange={setCreateLeadsDialogOpen}>
         <DialogContent>
@@ -337,7 +304,23 @@ export default function LeadsPage() {
               </DialogDescription>
             </DialogHeader>
 
-            <form
+            {/* Show empty state if no signatures found (and not loading, and no error) */}
+            {!signaturesLoading && !signaturesError && signatures.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-8 px-4 space-y-4">
+                <p className="text-sm text-muted-foreground text-center">
+                  No signatures found. Please create a signature to continue.
+                </p>
+                <Button
+                  type="button"
+                  onClick={handleCreateSignature}
+                  className="gap-2"
+                >
+                  <Plus className="h-4 w-4" />
+                  Create Signature
+                </Button>
+              </div>
+            ) : (
+              <form
               className="space-y-4 pt-2"
               onSubmit={async (e) => {
                 e.preventDefault()
@@ -548,6 +531,7 @@ export default function LeadsPage() {
                 </Button>
               </div>
             </form>
+            )}
           </DialogContent>
         </Dialog>
 
