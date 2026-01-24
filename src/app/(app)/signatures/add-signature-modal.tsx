@@ -348,41 +348,96 @@ export function AddSignatureModal({
                           createSupabaseUploadAdapter(loader)
                       }
 
-                      // Intercept link command execution to show custom dialog
+                      // Completely disable CKEditor's built-in link balloon and use our custom dialog
                       const linkCommand = editor.commands.get("link")
                       if (linkCommand) {
                         // Store original execute function
                         const originalExecute = linkCommand.execute.bind(linkCommand)
                         
-                        // Override execute to show our dialog first
+                        // Override execute to always show our custom dialog
                         linkCommand.execute = (url?: string) => {
-                          if (url) {
-                            // If URL provided directly, use it
-                            originalExecute(url)
-                          } else {
-                            // Show our custom dialog
-                            const selection = editor.model.document.selection
-                            let text = ""
-                            const ranges = Array.from(selection.getRanges())
-                            ranges.forEach((range: any) => {
-                              for (const item of range.getItems()) {
-                                if (item.is("$textProxy") || item.is("$text")) {
-                                  text += item.data
-                                }
+                          // Always show our custom dialog, even if URL is provided
+                          const selection = editor.model.document.selection
+                          let text = ""
+                          const ranges = Array.from(selection.getRanges())
+                          ranges.forEach((range: any) => {
+                            for (const item of range.getItems()) {
+                              if (item.is("$textProxy") || item.is("$text")) {
+                                text += item.data
                               }
-                            })
-                            
-                            // If there's an existing link, pre-fill the URL
-                            if (linkCommand.value) {
-                              setLinkUrl(linkCommand.value)
                             }
-                            
-                            setSelectedText(text)
-                            setLinkDisplayText(text)
-                            setShowLinkDialog(true)
+                          })
+                          
+                          // If there's an existing link, pre-fill the URL
+                          if (linkCommand.value) {
+                            setLinkUrl(linkCommand.value)
+                          } else if (url) {
+                            setLinkUrl(url)
                           }
+                          
+                          setSelectedText(text)
+                          setLinkDisplayText(text)
+                          setShowLinkDialog(true)
                         }
                       }
+
+                      // Completely disable CKEditor's built-in link balloon panel
+                      const linkForm = editor.plugins.get("LinkForm")
+                      if (linkForm) {
+                        // Override showUI to prevent it from showing and use our custom dialog
+                        linkForm.showUI = () => {
+                          // Don't show the built-in UI, show our custom dialog instead
+                          const selection = editor.model.document.selection
+                          let text = ""
+                          const ranges = Array.from(selection.getRanges())
+                          ranges.forEach((range: any) => {
+                            for (const item of range.getItems()) {
+                              if (item.is("$textProxy") || item.is("$text")) {
+                                text += item.data
+                              }
+                            }
+                          })
+                          
+                          const linkCommand = editor.commands.get("link")
+                          if (linkCommand?.value) {
+                            setLinkUrl(linkCommand.value)
+                          }
+                          
+                          setSelectedText(text)
+                          setLinkDisplayText(text)
+                          setShowLinkDialog(true)
+                        }
+                        // Hide it immediately if it's already shown
+                        linkForm.hideUI()
+                      }
+
+                      // Use MutationObserver to hide any link balloons that appear
+                      const observer = new MutationObserver(() => {
+                        const linkBalloons = document.querySelectorAll(
+                          '.ck.ck-link-form, .ck.ck-link-actions, .ck-balloon-panel[class*="link"], [class*="ck-link"]'
+                        )
+                        linkBalloons.forEach((balloon: any) => {
+                          if (balloon && balloon.offsetParent !== null) {
+                            balloon.style.display = 'none'
+                            balloon.style.visibility = 'hidden'
+                            balloon.style.opacity = '0'
+                            balloon.style.pointerEvents = 'none'
+                          }
+                        })
+                      })
+
+                      // Start observing the document body for link balloons
+                      observer.observe(document.body, {
+                        childList: true,
+                        subtree: true,
+                        attributes: true,
+                        attributeFilter: ['class', 'style']
+                      })
+
+                      // Cleanup observer when editor is destroyed
+                      editor.on('destroy', () => {
+                        observer.disconnect()
+                      })
 
                       // Intercept Ctrl+K shortcut to show custom dialog
                       editor.keystrokes.set("Ctrl+K", (data: any, cancel: () => void) => {
@@ -447,13 +502,20 @@ export function AddSignatureModal({
                           "|",
                           "imageTextAlternative",
                         ],
+                        styles: [
+                          "inline",
+                          "block",
+                          "side",
+                        ],
+                        resizeUnit: "px",
                       },
                       link: {
                         // Automatically add https:// to URLs that don't have a protocol
                         defaultProtocol: "https://",
                         // Configure which protocols are allowed
                         allowedProtocols: ["http", "https", "mailto", "tel"],
-                        // Disable the default link balloon UI - we use custom dialog
+                        // Completely disable the default link balloon UI - we use custom dialog
+                        addTargetToExternalLinks: true,
                         decorators: {
                           openInNewTab: {
                             mode: "automatic",
