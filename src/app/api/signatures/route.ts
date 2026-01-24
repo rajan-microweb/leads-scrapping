@@ -16,12 +16,17 @@ export async function GET() {
       .from('signatures')
       .select('id, name, content, "createdAt", "updatedAt"')
       .eq('userId', session.user.id)
+      // Note: Supabase order() may need unquoted column name for camelCase columns
+      // If this fails, try: .order('updatedAt', { ascending: false })
       .order('updatedAt', { ascending: false })
 
     if (error) {
       console.error("signatures GET error:", error)
+      console.error("Error details:", JSON.stringify(error, null, 2))
+      console.error("Error code:", error.code)
+      console.error("Error hint:", error.hint)
       return NextResponse.json(
-        { error: "Internal server error" },
+        { error: "Internal server error", details: error.message },
         { status: 500 }
       )
     }
@@ -29,8 +34,10 @@ export async function GET() {
     return NextResponse.json(signatures || [], { status: 200 })
   } catch (error) {
     console.error("signatures GET error:", error)
+    const errorMessage = error instanceof Error ? error.message : "Unknown error"
+    console.error("Error details:", errorMessage)
     return NextResponse.json(
-      { error: "Internal server error" },
+      { error: "Internal server error", details: errorMessage },
       { status: 500 }
     )
   }
@@ -88,8 +95,11 @@ export async function POST(request: Request) {
 
     if (error) {
       console.error("signatures POST error:", error)
+      console.error("Error details:", JSON.stringify(error, null, 2))
+      console.error("Error code:", error.code)
+      console.error("Error hint:", error.hint)
       return NextResponse.json(
-        { error: "Internal server error" },
+        { error: "Internal server error", details: error.message },
         { status: 500 }
       )
     }
