@@ -42,6 +42,7 @@ type Signature = {
 }
 
 const ALLOWED_EXTENSIONS = [".xlsx", ".xls", ".csv"]
+const CREATE_NEW_SIGNATURE_VALUE = "__create_new_signature__"
 
 export default function LeadsPage() {
   const router = useRouter()
@@ -241,8 +242,18 @@ export default function LeadsPage() {
     router.push("/integrations")
   }
 
-  const handleCreateSignature = () => {
+  const handleCreateSignature = (preserveData?: { fileName?: string }) => {
     setCreateLeadsDialogOpen(false)
+    if (preserveData?.fileName && typeof window !== "undefined") {
+      try {
+        sessionStorage.setItem(
+          "createLeadsPreserve",
+          JSON.stringify({ fileName: preserveData.fileName }),
+        )
+      } catch {
+        /* ignore */
+      }
+    }
     router.push("/signatures")
   }
 
@@ -304,29 +315,18 @@ export default function LeadsPage() {
               </DialogDescription>
             </DialogHeader>
 
-            {/* Show empty state if no signatures found (and not loading, and no error) */}
-            {!signaturesLoading && !signaturesError && signatures.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-8 px-4 space-y-4">
-                <p className="text-sm text-muted-foreground text-center">
-                  No signatures found. Please create a signature to continue.
-                </p>
-                <Button
-                  type="button"
-                  onClick={handleCreateSignature}
-                  className="gap-2"
-                >
-                  <Plus className="h-4 w-4" />
-                  Create Signature
-                </Button>
-              </div>
-            ) : (
-              <form
+            <form
               className="space-y-4 pt-2"
               onSubmit={async (e) => {
                 e.preventDefault()
 
                 setUploadError(null)
                 setUploadSuccess(null)
+
+                if (selectedSignatureId === CREATE_NEW_SIGNATURE_VALUE) {
+                  handleCreateSignature({ fileName: selectedFile?.name ?? undefined })
+                  return
+                }
 
                 if (!selectedFile) {
                   setUploadError("Please choose a file to upload.")
@@ -348,11 +348,9 @@ export default function LeadsPage() {
                 try {
                   setUploading(true)
 
-                  // 1. Build payload for n8n webhook
                   const formData = new FormData()
                   formData.append("file", selectedFile)
 
-                  // 1a. Get userId from profile (only need the id, not full details)
                   let userId = ""
                   try {
                     const profileRes = await fetch("/api/profile")
@@ -363,10 +361,11 @@ export default function LeadsPage() {
                       }
                     }
                   } catch {
-                    // If profile fails to load, continue without userId
+                    /* continue without userId */
                   }
 
-                  // 1b. Attach selected signature details, if any
+                  formData.append("userId", userId)
+
                   let selectedSignature: Signature | null = null
                   if (selectedSignatureId) {
                     selectedSignature =
@@ -374,26 +373,15 @@ export default function LeadsPage() {
                       null
                   }
 
-                  // Add userId as a separate field
-                  formData.append("userId", userId)
-                  
-                  // Add signature fields separately
                   if (selectedSignature) {
                     formData.append("signatureId", selectedSignature.id ?? "")
                     formData.append("signatureName", selectedSignature.name ?? "")
                     formData.append("signatureContent", selectedSignature.content ?? "")
                     formData.append("signatureCreatedAt", selectedSignature.createdAt ?? "")
                     formData.append("signatureUpdatedAt", selectedSignature.updatedAt ?? "")
-                  } else {
-                    // Send empty strings if no signature is selected
-                    formData.append("signatureId", "")
-                    formData.append("signatureName", "")
-                    formData.append("signatureContent", "")
-                    formData.append("signatureCreatedAt", "")
-                    formData.append("signatureUpdatedAt", "")
                   }
 
-                  // 1c. Send file + userId + signature (with separate fields) to n8n webhook
+                  // Send file + userId + signature (if any) to n8n webhook
                   const n8nResponse = await fetch(
                     "https://n8n.srv1248804.hstgr.cloud/webhook/get-leads",
                     {
@@ -406,7 +394,6 @@ export default function LeadsPage() {
                     throw new Error("Failed to upload file to processing service.")
                   }
 
-                  // 2. Save fileName via backend (no file storage) and associate selected signature reference
                   const saveResponse = await fetch("/api/lead-file", {
                     method: "POST",
                     headers: {
@@ -414,7 +401,7 @@ export default function LeadsPage() {
                     },
                     body: JSON.stringify({
                       fileName: selectedFile.name,
-                      signatureId: selectedSignatureId || null,
+                      signatureId: selectedSignature ? selectedSignature.id : null,
                     }),
                   })
 
@@ -431,9 +418,7 @@ export default function LeadsPage() {
                   setUploadSuccess("File uploaded to n8n successfully.")
                   setSelectedFile(null)
                   setSelectedSignatureId("")
-                  // Reset file input so the user can re-upload (including the same file name)
                   setFileInputKey((k) => k + 1)
-                  // Close the dialog after successful upload
                   setCreateLeadsDialogOpen(false)
                 } catch (err) {
                   setUploadError(
@@ -459,7 +444,14 @@ export default function LeadsPage() {
                   className="block w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm outline-none ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                   value={selectedSignatureId}
                   onChange={(event) => {
-                    setSelectedSignatureId(event.target.value)
+                    const value = event.target.value
+                    if (value === CREATE_NEW_SIGNATURE_VALUE) {
+                      handleCreateSignature({
+                        fileName: selectedFile?.name ?? undefined,
+                      })
+                      return
+                    }
+                    setSelectedSignatureId(value)
                   }}
                   disabled={signaturesLoading || !!signaturesError}
                 >
@@ -467,8 +459,6 @@ export default function LeadsPage() {
                     <option value="">Loading signatures...</option>
                   ) : signaturesError ? (
                     <option value="">Unable to load signatures</option>
-                  ) : signatures.length === 0 ? (
-                    <option value="">No signatures available</option>
                   ) : (
                     <>
                       <option value="">No signature</option>
@@ -477,6 +467,9 @@ export default function LeadsPage() {
                           {signature.name}
                         </option>
                       ))}
+                      <option value={CREATE_NEW_SIGNATURE_VALUE}>
+                        Create New Signature
+                      </option>
                     </>
                   )}
                 </select>
@@ -531,7 +524,6 @@ export default function LeadsPage() {
                 </Button>
               </div>
             </form>
-            )}
           </DialogContent>
         </Dialog>
 
