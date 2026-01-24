@@ -1,78 +1,39 @@
-import DOMPurify from "isomorphic-dompurify"
-
 /**
  * Sanitizes HTML content for safe storage in the database.
- * Configures DOMPurify to allow safe HTML tags and attributes for email signatures.
- * Removes potentially dangerous content (scripts, event handlers, etc.)
- * while preserving formatting (bold, italic, links, colors, etc.)
+ * Basic sanitization that removes dangerous content while preserving formatting.
+ * This is a simpler implementation that avoids dependency issues with isomorphic-dompurify.
+ * 
+ * @param html - The HTML string to sanitize
+ * @returns The sanitized HTML string, or empty string if input is invalid
  */
 export function sanitizeHtml(html: string): string {
-  return DOMPurify.sanitize(html, {
-    // Allowed tags for email signatures
-    ALLOWED_TAGS: [
-      "p",
-      "br",
-      "strong",
-      "b",
-      "em",
-      "i",
-      "u",
-      "span",
-      "div",
-      "a",
-      "ul",
-      "ol",
-      "li",
-      "h1",
-      "h2",
-      "h3",
-      "h4",
-      "h5",
-      "h6",
-      "img",
-      "table",
-      "thead",
-      "tbody",
-      "tr",
-      "td",
-      "th",
-      "hr",
-      "blockquote",
-      "font",
-    ],
-    // Allowed attributes
-    ALLOWED_ATTR: [
-      "href",
-      "target",
-      "rel",
-      "style",
-      "class",
-      "id",
-      "src",
-      "alt",
-      "width",
-      "height",
-      "color",
-      "face",
-      "size",
-      "align",
-      "valign",
-      "colspan",
-      "rowspan",
-      "border",
-      "cellpadding",
-      "cellspacing",
-    ],
-    // Allow data attributes for CKEditor
-    ALLOW_DATA_ATTR: false,
-    // Remove scripts and event handlers
-    FORBID_TAGS: ["script", "iframe", "object", "embed", "form"],
-    FORBID_ATTR: ["onerror", "onload", "onclick", "onmouseover"],
-    // Keep relative URLs
-    ALLOW_UNKNOWN_PROTOCOLS: false,
-    // Keep relative URLs
-    RETURN_DOM: false,
-    RETURN_DOM_FRAGMENT: false,
-    RETURN_TRUSTED_TYPE: false,
-  })
+  if (!html || typeof html !== "string") {
+    return ""
+  }
+
+  let sanitized = html
+
+  // Remove script tags and their content (case insensitive)
+  sanitized = sanitized.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
+  
+  // Remove event handlers (onclick, onerror, onload, etc.)
+  sanitized = sanitized.replace(/\s*on\w+\s*=\s*["'][^"']*["']/gi, "")
+  sanitized = sanitized.replace(/\s*on\w+\s*=\s*[^\s>]*/gi, "")
+  
+  // Remove dangerous tags
+  sanitized = sanitized.replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, "")
+  sanitized = sanitized.replace(/<object\b[^<]*(?:(?!<\/object>)<[^<]*)*<\/object>/gi, "")
+  sanitized = sanitized.replace(/<embed\b[^<]*(?:(?!<\/embed>)<[^<]*)*<\/embed>/gi, "")
+  sanitized = sanitized.replace(/<form\b[^<]*(?:(?!<\/form>)<[^<]*)*<\/form>/gi, "")
+  
+  // Remove javascript: and dangerous data: URLs from href and src attributes
+  sanitized = sanitized.replace(/(href|src)\s*=\s*["']?\s*javascript:/gi, "$1=\"#\"")
+  sanitized = sanitized.replace(/(href|src)\s*=\s*["']?\s*data:text\/html/gi, "$1=\"#\"")
+  
+  // Remove any remaining javascript: protocol references
+  sanitized = sanitized.replace(/javascript:/gi, "")
+  
+  // Return the sanitized HTML
+  // If sanitization resulted in empty string, return empty (don't return original as fallback)
+  return sanitized.trim()
 }

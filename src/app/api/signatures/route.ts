@@ -99,11 +99,15 @@ export async function POST(request: Request) {
     const rawContent = body.content.trim()
     
     // Sanitize HTML content before storing
+    // Note: sanitizeHtml will return empty string if input is invalid/null,
+    // but will preserve valid HTML content
     const sanitizedContent = sanitizeHtml(rawContent)
 
-    if (!sanitizedContent) {
+    // Allow empty content (user might want to create signature later)
+    // But ensure we have at least name
+    if (!name) {
       return NextResponse.json(
-        { error: "Invalid HTML content" },
+        { error: "name is required" },
         { status: 400 }
       )
     }
