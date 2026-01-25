@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "x-api-key, content-type",
+  "Access-Control-Allow-Headers": "authorization, content-type",
 }
 
 interface RequestBody {
@@ -32,23 +32,16 @@ serve(async (req) => {
       )
     }
 
-    // Validate authorization - only x-api-key header with N8N_SECRET
-    const xApiKey = req.headers.get("x-api-key")
+    // Validate authorization - Authorization: Bearer <SUPABASE_ANON_KEY>
+    const authHeader = req.headers.get("Authorization")
     
-    // Debug: Log all headers (remove in production if needed)
-    const allHeaders: Record<string, string> = {}
-    req.headers.forEach((value, key) => {
-      allHeaders[key] = key.toLowerCase().includes('key') || key.toLowerCase().includes('auth') ? '[REDACTED]' : value
-    })
-    console.log("Received headers:", Object.keys(allHeaders))
+    // Get Supabase Anon Key from environment
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? ""
     
-    // Get N8N secret from environment (stored in Supabase secrets)
-    const n8nSecret = Deno.env.get("N8N_SECRET")
-    
-    if (!n8nSecret) {
-      console.error("N8N_SECRET is not set in environment")
+    if (!supabaseAnonKey) {
+      console.error("SUPABASE_ANON_KEY is not set in environment")
       return new Response(
-        JSON.stringify({ error: "Server configuration error: N8N_SECRET not configured" }),
+        JSON.stringify({ error: "Server configuration error: SUPABASE_ANON_KEY not configured" }),
         {
           status: 500,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -56,14 +49,16 @@ serve(async (req) => {
       )
     }
     
-    // Validate: only x-api-key header with N8N_SECRET
-    if (!xApiKey) {
-      console.error("x-api-key header is missing")
+    // Extract Bearer token
+    const bearerToken = authHeader?.startsWith("Bearer ") 
+      ? authHeader.substring(7).trim() 
+      : null
+    
+    // Validate: Authorization header with Bearer token matching Supabase Anon Key
+    if (!bearerToken) {
+      console.error("Authorization header with Bearer token is missing")
       return new Response(
-        JSON.stringify({ 
-          error: "Unauthorized. Valid x-api-key header required.",
-          receivedHeaders: Object.keys(allHeaders)
-        }),
+        JSON.stringify({ error: "Unauthorized. Valid Authorization: Bearer header required." }),
         {
           status: 401,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -71,10 +66,10 @@ serve(async (req) => {
       )
     }
     
-    if (xApiKey !== n8nSecret) {
-      console.error("x-api-key value does not match N8N_SECRET")
+    if (bearerToken !== supabaseAnonKey) {
+      console.error("Bearer token does not match SUPABASE_ANON_KEY")
       return new Response(
-        JSON.stringify({ error: "Unauthorized. Invalid x-api-key value." }),
+        JSON.stringify({ error: "Unauthorized. Invalid authorization token." }),
         {
           status: 401,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
