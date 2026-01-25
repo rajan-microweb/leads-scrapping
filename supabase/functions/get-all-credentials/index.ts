@@ -68,8 +68,15 @@ serve(async (req) => {
     
     if (bearerToken !== supabaseAnonKey) {
       console.error("Bearer token does not match SUPABASE_ANON_KEY")
+      console.error("Expected length:", supabaseAnonKey.length)
+      console.error("Received length:", bearerToken.length)
+      console.error("First 20 chars of expected:", supabaseAnonKey.substring(0, 20))
+      console.error("First 20 chars of received:", bearerToken.substring(0, 20))
       return new Response(
-        JSON.stringify({ error: "Unauthorized. Invalid authorization token." }),
+        JSON.stringify({ 
+          error: "Unauthorized. Invalid authorization token.",
+          hint: "Verify the Supabase Anon Key matches the one in your project settings"
+        }),
         {
           status: 401,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
