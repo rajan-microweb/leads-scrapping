@@ -352,12 +352,27 @@ export default function LeadsPage() {
                   formData.append("file", selectedFile)
 
                   let userId = ""
+                  let userProfile: {
+                    id?: string
+                    name?: string | null
+                    fullName?: string | null
+                    email?: string | null
+                    phone?: string | null
+                    jobTitle?: string | null
+                    country?: string | null
+                    timezone?: string | null
+                    image?: string | null
+                    avatarUrl?: string | null
+                    createdAt?: string | null
+                    updatedAt?: string | null
+                  } | null = null
                   try {
                     const profileRes = await fetch("/api/profile")
                     if (profileRes.ok) {
-                      const userProfile: any = await profileRes.json()
-                      if (userProfile && !userProfile.error && userProfile.id) {
-                        userId = userProfile.id
+                      const data = await profileRes.json()
+                      if (data && !data.error && data.id) {
+                        userId = data.id
+                        userProfile = data
                       }
                     }
                   } catch {
@@ -365,6 +380,22 @@ export default function LeadsPage() {
                   }
 
                   formData.append("userId", userId)
+
+                  // Personal details – each field separately in webhook body
+                  if (userProfile) {
+                    if (userProfile.id != null) formData.append("personalId", String(userProfile.id))
+                    if (userProfile.name != null && userProfile.name !== "") formData.append("personalName", userProfile.name)
+                    if (userProfile.fullName != null && userProfile.fullName !== "") formData.append("personalFullName", userProfile.fullName)
+                    if (userProfile.email != null && userProfile.email !== "") formData.append("personalEmail", userProfile.email)
+                    if (userProfile.phone != null && userProfile.phone !== "") formData.append("personalPhone", userProfile.phone)
+                    if (userProfile.jobTitle != null && userProfile.jobTitle !== "") formData.append("personalJobTitle", userProfile.jobTitle)
+                    if (userProfile.country != null && userProfile.country !== "") formData.append("personalCountry", userProfile.country)
+                    if (userProfile.timezone != null && userProfile.timezone !== "") formData.append("personalTimezone", userProfile.timezone)
+                    if (userProfile.image != null && userProfile.image !== "") formData.append("personalImage", userProfile.image)
+                    if (userProfile.avatarUrl != null && userProfile.avatarUrl !== "") formData.append("personalAvatarUrl", userProfile.avatarUrl)
+                    if (userProfile.createdAt != null) formData.append("personalCreatedAt", userProfile.createdAt)
+                    if (userProfile.updatedAt != null) formData.append("personalUpdatedAt", userProfile.updatedAt)
+                  }
 
                   let selectedSignature: Signature | null = null
                   if (selectedSignatureId) {

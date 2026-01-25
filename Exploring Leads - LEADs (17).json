@@ -1,0 +1,1067 @@
+{
+  "name": "Exploring Leads - LEADs",
+  "nodes": [
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        3520,
+        0
+      ],
+      "id": "4c3da0d5-c8ba-4aed-b47e-1b6af9241021",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "url": "=https://www.{{ $json[\"Business Emails\"].split(\"@\")[1] }}",
+        "options": {
+          "redirect": {
+            "redirect": {
+              "maxRedirects": 5
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "id": "9f8ddae2-a55a-464c-a877-0b1cb866862b",
+      "name": "Website Data Scrapping",
+      "type": "n8n-nodes-base.httpRequest",
+      "maxTries": 3,
+      "position": [
+        3776,
+        16
+      ],
+      "retryOnFail": true,
+      "typeVersion": 4.1
+    },
+    {
+      "parameters": {
+        "operation": "extractHtmlContent",
+        "dataPropertyName": "=data",
+        "extractionValues": {
+          "values": [
+            {
+              "key": "content",
+              "cssSelector": "body"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.html",
+      "typeVersion": 1.2,
+      "position": [
+        4000,
+        16
+      ],
+      "id": "3adfcba5-46c7-4d26-8b2c-abbbcbd7aab6",
+      "name": "HTML"
+    },
+    {
+      "parameters": {
+        "model": "llama-3.1-8b-instant",
+        "options": {
+          "maxTokensToSample": 1000
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        5408,
+        192
+      ],
+      "id": "5c46d790-0dac-4b87-95d4-1b332e4ec36d",
+      "name": "Groq Model",
+      "credentials": {
+        "groqApi": {
+          "id": "MlyWbDs5KOwPul7i",
+          "name": "ai-rag-chatbot Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=TASK:\nWrite a marketing-oriented but professional, human-sounding outreach email based on verified company intelligence.\n\nGOAL:\nThe email should feel confident, helpful, and business-focused — not academic or overly cautious.\n\nIMPORTANT RULES (MANDATORY):\n- Use ONLY the provided company intelligence\n- Do NOT invent founder, CEO, industry, or clients\n- If a field is null, simply skip it naturally\n- Marketing tone is allowed\n- Confidence is encouraged\n- Avoid exaggeration or false claims\n- Do NOT sound salesy\n- Do NOT use emojis\n- Return ONLY valid JSON\n- No markdown\n- No explanations\n\nRECIPIENT DATA:\nCompany Name: {{ $json.company_intelligence.company_name }}\nWhat They Do: {{ $json.company_intelligence.what_they_do }}\nKey Services: {{ JSON.stringify($json.company_intelligence.key_services) }}\n\nOUR CONTEXT:\nWe reviewed their website carefully and identified opportunities to improve clarity, positioning, user experience, and conversions.\n\nOUTPUT FORMAT (STRICT):\n{\n  \"subject\": \"\",\n  \"body\": \"\"\n}\n\nSUBJECT RULES:\n- Plain text only\n- No emojis\n- No quotes\n- No question marks\n- Professional, curiosity-driven\n- Similar tone to:\n  We reviewed your website — ideas to improve growth & conversions\n\nEMAIL BODY RULES:\n- HTML only\n- Allowed tags: <p>, <strong>, <ul>, <li>, <br>\n- Do NOT wrap with <html> or <body>\n- Do NOT include a signature block\n- The email MUST include at least ONE bullet list (<ul><li>)\n- The email MUST include bold section labels using <strong>\n- The email MUST NOT be only paragraphs\n- Structure and scannability are REQUIRED\n- You may use some subtle business emojis (📈, 🚀, 💡).\n\nEMAIL STRUCTURE (FOLLOW STRICTLY):\n1.  Greeting rules:\n- If the email username starts with info, support, contact, hello, sales, admin, help, etc → use \"Hello,\"\n- Otherwise If the email username starts with some client's name → use: \"Hello {{ $('Extract from File').first().json['Business Emails'].split(\"@\")[0].toTitleCase() }},\"\n- use only these 2 options properly acceoding to email ids, don't use other than these for greetings...\n2. Warm, polite opening line\n3. Mention that we reviewed their website genuinely\n4. Acknowledge what they do well using \"What They Do\"\n5. Mention 2–3 potential improvement areas (UX, clarity, conversions, positioning) — keep it observational, not critical\n6. Briefly introduce our company in ONE sentence (neutral, non-salesy)\n7. SERVICE SELECTION RULES:\n  - Choose ONLY the 4–6 most relevant services\n  - Prefer services aligned with growth, UX, AI, cloud, or digital transformation if applicable\n  - Never list more than 6 services\n  - Do NOT list development frameworks unless clearly relevant\n  - Each service must include a short benefit\n8. Describe a simple, calm 3-step working approach\n9. Soft, no-pressure CTA for a quick discussion\n10. Soft final sentence that naturally concludes the message\n    (NO sign-off, NO closing phrase, NO signature)\n\nSTYLE GUIDELINES:\n- Calm, Respectful, Thoughtful, Conversational but professional, Sounds like a real human wrote it.\n\nNow generate the email.\n",
+        "hasOutputParser": true,
+        "messages": {
+          "messageValues": [
+            {
+              "message": "=You are a senior B2B outbound email copywriter.\n\nWrite personalized, professional, trust-building cold emails.\nAvoid hype, avoid salesy language, and sound real-human and respectful.\n\nCRITICAL RULES:\n- Return ONLY valid JSON\n- No markdown\n- No explanations\n- No extra text\n- The JSON must be directly parseable\n- Write calm, respectful, insight-driven cold emails.\n- Avoid hype, buzzwords, exaggeration, and sales pressure.\n- Never invent facts or people.\n"
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.7,
+      "position": [
+        6496,
+        0
+      ],
+      "id": "845d5ad0-9eeb-4f5e-be76-a70b3c8d6313",
+      "name": "Basic LLM Chain",
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * This node parses the Company Intelligence Agent output\n * and guarantees clean structured JSON for downstream usage\n */\n\nconst raw = $input.first().json.text || \"\";\n\n// 1. Remove markdown code fences if present\nlet cleaned = raw.replace(/```json/gi, \"\").replace(/```/g, \"\").trim();\n\n// 2. Remove any trailing explanation after JSON block\n//    (keeps only first valid JSON object)\nconst firstBrace = cleaned.indexOf(\"{\");\nconst lastBrace = cleaned.lastIndexOf(\"}\");\n\nif (firstBrace === -1 || lastBrace === -1) {\n  return {\n    json: {\n      error: \"NO_JSON_FOUND\",\n      raw_output: raw\n    }\n  };\n}\n\ncleaned = cleaned.substring(firstBrace, lastBrace + 1);\n\n// 3. Parse JSON safely\ntry {\n  const parsed = JSON.parse(cleaned);\n\n  return {\n    json: {\n      company_intelligence: parsed\n    }\n  };\n} catch (err) {\n  return {\n    json: {\n      error: \"JSON_PARSE_FAILED\",\n      message: err.message,\n      cleaned_output: cleaned,\n      raw_output: raw\n    }\n  };\n}\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5808,
+        0
+      ],
+      "id": "b7817bf2-3d62-4fb0-8137-eb0d41a6234a",
+      "name": "Converting into Structured Output",
+      "retryOnFail": false
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get the raw text output from the LLM\nconst rawText = $input.first().json.text;\n\n// CLEANUP: Remove markdown code blocks if Llama adds them (e.g. ```json ... ```)\nconst cleanText = rawText.replace(/```json|```/g, '').trim();\n\ntry {\n  // Parse the string into a real JSON object\n  const parsedData = JSON.parse(cleanText);\n\n  // Return exactly the structure you asked for\n  return {\n    output: parsedData\n  };\n\n} catch (error) {\n  // Fallback if the AI fails to generate valid JSON\n  return {\n    error: \"Failed to parse JSON\",\n    raw_output: rawText\n  };\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3536,
+        -224
+      ],
+      "id": "47277577-041e-4dc8-85be-1cb4ad96898c",
+      "name": "Converting into Structured Output1",
+      "retryOnFail": false,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "toRecipients": "={{ $('Edit Fields').first().json['Business Emails'] }}",
+        "subject": "={{ $json.output.subject }}",
+        "bodyContent": "={{ $json.output.body }}",
+        "additionalFields": {
+          "bodyContentType": "html"
+        }
+      },
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
+      "position": [
+        5360,
+        -240
+      ],
+      "id": "948d295f-6c39-4646-be05-f7afd0720ea7",
+      "name": "Send a message",
+      "webhookId": "f341ae1d-34c8-441f-b79f-bdf73ba14dad",
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "nAhu1P7dy32nm4Fa",
+          "name": "Microsoft Outlook account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "llama-3.1-8b-instant",
+        "options": {
+          "maxTokensToSample": 1000
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        6512,
+        208
+      ],
+      "id": "93faa3b5-3803-4cf7-99a3-f0d1df73aefc",
+      "name": "Groq Chat Model",
+      "credentials": {
+        "groqApi": {
+          "id": "MlyWbDs5KOwPul7i",
+          "name": "ai-rag-chatbot Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "ad154a97-f20d-4117-a6f3-f57b43e0e209",
+              "leftValue": "={{ $json.output }}",
+              "rightValue": "",
+              "operator": {
+                "type": "object",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        3872,
+        -224
+      ],
+      "id": "d94fd4ac-cd1e-4b6e-98a7-b480a23628e0",
+      "name": "If1"
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n\t\"subject\": \"\",\n\t\"body\": \"\"\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        6688,
+        192
+      ],
+      "id": "1a5f146c-28da-4c43-a9ce-50e462f4fbde",
+      "name": "Structured Output Parser"
+    },
+    {
+      "parameters": {
+        "operation": "xlsx",
+        "binaryPropertyName": "file",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        3072,
+        0
+      ],
+      "id": "c3fb0f86-7855-49c6-a056-8c9a068bec14",
+      "name": "Extract from File",
+      "executeOnce": false
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "get-leads",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        2832,
+        0
+      ],
+      "id": "77b44977-e92e-48e6-a1dc-5ce27f0a0ddc",
+      "name": "Webhook1",
+      "webhookId": "32708903-af6e-4fce-bfd6-c194678b43fe"
+    },
+    {
+      "parameters": {
+        "model": "llama-3.3-70b-versatile",
+        "options": {
+          "maxTokensToSample": 1000
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        4144,
+        224
+      ],
+      "id": "0d903727-55f2-43e2-a585-1c89264f8998",
+      "name": "Groq Chat Model1",
+      "credentials": {
+        "groqApi": {
+          "id": "MlyWbDs5KOwPul7i",
+          "name": "ai-rag-chatbot Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "output.important_links",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        4560,
+        16
+      ],
+      "id": "22733232-5a43-4064-acdc-ef34003d49c4",
+      "name": "Split Out"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        5008,
+        352
+      ],
+      "id": "1906ddec-ca58-4efb-a7f5-22d2b5a2fca7",
+      "name": "HTTP Request",
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "extractHtmlContent",
+        "extractionValues": {
+          "values": [
+            {
+              "key": "page-content",
+              "cssSelector": "body"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.html",
+      "typeVersion": 1.2,
+      "position": [
+        5216,
+        352
+      ],
+      "id": "06306ffd-ae56-4633-bbf5-9d153791b141",
+      "name": "HTML2"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        4752,
+        16
+      ],
+      "id": "e8b2f9f5-187b-4a30-8e1c-a63f699e4cf4",
+      "name": "Loop Over Items1",
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are a strict JSON extraction engine.\n\nTASK:\nFrom the given homepage HTML content, identify the MOST IMPORTANT internal links that can help understand:\n- company background\n- founders / leadership\n- vision / story\n- services or products\n- credibility (press, careers, blog)\n\nRULES:\n- Extract ONLY internal links\n- Ignore login, pricing, contact-only, support pages\n- Prefer links with words like: about, team, leadership, company, founder, story, careers, press, blog\n- Remove duplicates\n- Return ONLY valid JSON\n- No markdown\n- No explanations\n- No extra text\n\nOUTPUT FORMAT:\n{\n  \"important_links\": [\n    {\n      \"url\": \"\",\n      \"reason\": \"\"\n    }\n  ]\n}\n\nHOMEPAGE HTML:\n{{ $json.content.slice(0,10000) }}\n",
+        "hasOutputParser": true,
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        4208,
+        16
+      ],
+      "id": "21f7c07e-8977-4c26-bea4-453d03d9e02a",
+      "name": "AI – Discover Important Pages",
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n  \"important_links\": [\n    { \"url\": \"https://example.com/about\", \"reason\": \"Company background\" },\n    { \"url\": \"https://example.com/team\", \"reason\": \"Leadership information\" }\n  ]\n}\n"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        4352,
+        224
+      ],
+      "id": "4ee006f1-97bf-4742-9b0a-225d0518dc45",
+      "name": "Structured Output Parser1"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are a strict factual extraction engine.\n\nTASK:\nExtract factual company information ONLY from the given HTML content.\n\nCRITICAL RULES:\n- Use ONLY what is explicitly present in the text\n- Do NOT guess or infer\n- If data is missing, return null\n- Return ONLY valid JSON\n- No markdown\n- No commentary\n\nOUTPUT FORMAT:\n{\n  \"company_name\": null,\n  \"founders\": [],\n  \"ceo\": null,\n  \"leadership_team\": [],\n  \"company_story\": null,\n  \"services\": [],\n  \"products\": [],\n  \"industries\": [],\n  \"location\": null,\n  \"social_links\": {\n    \"linkedin\": null,\n    \"twitter\": null\n  }\n}\n\nHTML CONTENT:\n{{ $json[\"page-content\"].replace(/<script[\\s\\S]*?<\\/script>/gi, \"\").replace(/<style[\\s\\S]*?<\\/style>/gi, \"\").slice(0,5000) }}",
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        5424,
+        352
+      ],
+      "id": "64fd2c63-837e-4f59-9ae7-c682dbef48e8",
+      "name": "AI – Extract Company Facts From Page"
+    },
+    {
+      "parameters": {
+        "model": "llama-3.1-8b-instant",
+        "options": {
+          "maxTokensToSample": 1000,
+          "temperature": 0
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        5328,
+        560
+      ],
+      "id": "f65d47f4-9198-4e72-b7cb-e18a87e0c638",
+      "name": "Groq Chat Model2",
+      "credentials": {
+        "groqApi": {
+          "id": "MlyWbDs5KOwPul7i",
+          "name": "ai-rag-chatbot Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get raw text from LLM\nconst rawText = $input.first().json.text;\n\n// Clean markdown if LLM added it\nconst cleanText = rawText.replace(/```json|```/g, '').trim();\n\ntry {\n  const parsed = JSON.parse(cleanText);\n\n  return {\n    json: {\n      extracted_company_data: parsed\n    }\n  };\n\n} catch (err) {\n  return {\n    json: {\n      error: \"JSON_PARSE_FAILED\",\n      raw_output: rawText\n    }\n  };\n}\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5776,
+        352
+      ],
+      "id": "59796e3e-2433-4396-ba5e-ea9f4bbd67e1",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are a senior company intelligence analyst.\n\nTASK:\nAnalyze the aggregated factual data extracted from multiple website pages and produce a SINGLE, accurate company profile.\n\nRULES:\n- Do NOT invent facts\n- Prefer repeated or strongest signals\n- If unsure, set value to null\n- Be concise but complete\n- Return ONLY valid JSON\n\nOUTPUT FORMAT:\n{\n  \"company_name\": \"\",\n  \"industry\": \"\",\n  \"company_type\": \"\",\n  \"founder\": \"\",\n  \"ceo\": \"\",\n  \"leadership_summary\": \"\",\n  \"what_they_do\": \"\",\n  \"target_customers\": \"\",\n  \"key_services\": [],\n  \"brand_tone\": [],\n  \"credible_hook\": \"\"\n}\n\nINPUT DATA:\n{{ JSON.stringify($json.all_pages_data) }}\n",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "=You are a strict JSON API."
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.7,
+      "position": [
+        5456,
+        0
+      ],
+      "id": "a4d74c4b-0720-467e-a645-aa447d87acb9",
+      "name": "AI – Company Intelligence Agent",
+      "retryOnFail": true,
+      "executeOnce": false
+    },
+    {
+      "parameters": {
+        "jsCode": "const all = items.map(i => i.json.extracted_company_data);\n\nreturn {\n  json: {\n    all_pages_data: all\n  }\n};\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5024,
+        0
+      ],
+      "id": "c38cc6f1-6d03-4abc-9ead-6043f91bca35",
+      "name": "Code in JavaScript2"
+    },
+    {
+      "parameters": {
+        "amount": 10
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        5984,
+        352
+      ],
+      "id": "62ac1c22-dcc8-4177-9799-fd69b32a8c3e",
+      "name": "Wait",
+      "webhookId": "f8ac3116-b463-458b-bdd1-d85e7b334998"
+    },
+    {
+      "parameters": {
+        "amount": 30
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        5248,
+        0
+      ],
+      "id": "39881555-b42c-401a-bb5c-0d094e3fc473",
+      "name": "Wait1",
+      "webhookId": "c9441041-c204-40ec-9038-352932ba854c"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.microsoft.com/v1.0/users/rajan@microwebtec.com/sendMail",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "microsoftOutlookOAuth2Api",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"message\": {\n    \"subject\": \"{{ $('Basic LLM Chain').item.json.output.subject }}\",\n    \"body\": {\n      \"contentType\": \"HTML\",\n      \"content\": \"{{ $('Basic LLM Chain').item.json.output.body }}<br>{{ $('Webhook1').first().json.body.signatureContent }}\"\n    },\n    \"toRecipients\": [\n      {\n        \"emailAddress\": {\n          \"address\": \"{{ $('Loop Over Items').first().json['Business Emails'] }}\"\n        }\n      }\n    ]\n  },\n  \"saveToSentItems\": true\n}\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        7104,
+        0
+      ],
+      "id": "b9292faa-15a6-4f12-8932-cbe115cafe45",
+      "name": "Send Email via Graph API",
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "nAhu1P7dy32nm4Fa",
+          "name": "Microsoft Outlook account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $('Webhook1').first().json.body;\n\nconst personalDetails = JSON.parse(body.personalDetails);\nconst companyDetails = JSON.parse(body.companyDetails);\nconst integrationDetailsRaw = JSON.parse(body.integrationDetails);\nconst signature = JSON.parse(body.signature);\n\nfunction parseCredentials(raw) {\n  let c = raw;\n\n  // string → object\n  if (typeof c === 'string') {\n    try {\n      c = JSON.parse(c);\n    } catch {\n      return {};\n    }\n  }\n\n  // nested common patterns\n  if (c?.data) c = c.data;\n  if (c?.credentials) c = c.credentials;\n\n  return {\n    clientId: c.clientId || c.client_id || null,\n    tenantId: c.tenantId || c.tenant_id || null,\n    clientSecret: c.clientSecret || c.client_secret || null,\n    encrypted: c.encrypted || null\n  };\n}\n\nconst integrations = integrationDetailsRaw.map(i => ({\n  integration_id: i.id,\n  platform: i.platformName,\n  isConnected: i.isConnected,\n  createdAt: i.createdAt,\n  updatedAt: i.updatedAt,\n  credentials: parseCredentials(i.credentials)\n}));\n\nreturn [\n  {\n    json: {\n      personal: personalDetails,\n      company: companyDetails,\n      integrations,\n      signature\n    }\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6096,
+        -304
+      ],
+      "id": "7ca27a8b-0f16-4677-a9c7-646c79a33b90",
+      "name": "Code in JavaScript",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://login.microsoftonline.com/65a7074c-1115-4bfa-be12-ef371925b24d/oauth2/v2.0/token",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/x-www-form-urlencoded"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "client_id",
+              "value": "=63dc14b3-d64e-40e0-833f-51c8c8eedce8"
+            },
+            {
+              "name": "client_secret",
+              "value": "1P98Q~rTQ6ujjRTzuopjyX1N82trB63o7gwvBcfw"
+            },
+            {
+              "name": "grant_type",
+              "value": "client_credentials"
+            },
+            {
+              "name": "scope",
+              "value": "https://graph.microsoft.com/.default"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        6880,
+        0
+      ],
+      "id": "b5161fd9-468e-4d9f-a19a-51e21092c97e",
+      "name": "HTTP Request1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $('Webhook1').first().json.body;\n\n// Parse JSON strings safely\nconst personalDetails = JSON.parse(body.personalDetails);\nconst companyDetails = JSON.parse(body.companyDetails);\nconst integrationDetails = JSON.parse(body.integrationDetails);\nconst signature = JSON.parse(body.signature);\n\n// Normalize integrations\nconst integrations = integrationDetails.map(i => {\n  let credentials = {};\n\n  if (i.credentials) {\n    if (typeof i.credentials === 'string') {\n      try {\n        credentials = JSON.parse(i.credentials);\n      } catch (e) {\n        credentials = {};\n      }\n    } else if (typeof i.credentials === 'object') {\n      credentials = i.credentials;\n    }\n  }\n\n  return {\n    integration_id: i.id,\n    platform: i.platformName,\n    isConnected: i.isConnected,\n    createdAt: i.createdAt,\n    updatedAt: i.updatedAt,\n\n    credentials: {\n      clientId: credentials.clientId || null,\n      tenantId: credentials.tenantId || null,\n      clientSecret: credentials.clientSecret || null\n    }\n  };\n});\n\nreturn [\n  {\n    json: {\n      // ===== PERSONAL DETAILS =====\n      personal_id: personalDetails.id,\n      personal_name: personalDetails.name,\n      personal_fullName: personalDetails.fullName,\n      personal_email: personalDetails.email,\n      personal_phone: personalDetails.phone,\n      personal_jobTitle: personalDetails.jobTitle,\n      personal_country: personalDetails.country,\n      personal_timezone: personalDetails.timezone,\n      personal_createdAt: personalDetails.createdAt,\n      personal_updatedAt: personalDetails.updatedAt,\n\n      // ===== COMPANY DETAILS =====\n      company_id: companyDetails.id,\n      company_userId: companyDetails.userId,\n      company_name: companyDetails.companyName,\n      company_type: companyDetails.companyType,\n      company_websiteName: companyDetails.websiteName,\n      company_websiteUrl: companyDetails.websiteUrl,\n      company_industryExpertise: companyDetails.industryExpertise,\n      company_fullTechSummary: companyDetails.fullTechSummary,\n      company_serviceCatalog: companyDetails.serviceCatalog,\n      company_hook: companyDetails.theHook,\n      company_whatTheyDo: companyDetails.whatTheyDo,\n      company_valueProposition: companyDetails.valueProposition,\n      company_brandTone: companyDetails.brandTone,\n      company_createdAt: companyDetails.createdAt,\n      company_updatedAt: companyDetails.updatedAt,\n\n      // ===== INTEGRATION DETAILS =====\n      integrations,\n      \n      // ===== SIGNATURE =====\n      signature_id: signature.id,\n      signature_name: signature.name,\n      signature_content: signature.content,\n      signature_createdAt: signature.createdAt,\n      signature_updatedAt: signature.updatedAt,\n\n    }\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5792,
+        -176
+      ],
+      "id": "f9b439ec-bb3d-4618-a788-0493feb40bb6",
+      "name": "Code in JavaScript3"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://192.168.29.66:3000/api/user-data",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"userId\": \"cmknv4r210000lc943w45awid\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        3152,
+        -224
+      ],
+      "id": "cf2d0ade-2be8-4f94-a99c-66123fe4fe5a",
+      "name": "HTTP Request2",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://hwcwkmlgvxbetjsmnafv.supabase.co/functions/v1/get-all-credentials",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh3Y3drbWxndnhiZXRqc21uYWZ2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkxNDgxODQsImV4cCI6MjA4NDcyNDE4NH0.UzJOIL9bp-sy9vXPos86PhCUQZBgqPZBbE4IUXQTnlQ"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "userId",
+              "value": "={{ $('Webhook1').item.json.body.userId }}"
+            },
+            {
+              "name": "includeSecrets",
+              "value": "false"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        6016,
+        0
+      ],
+      "id": "40689b6a-1f77-42fd-980d-3c0669e2cf0b",
+      "name": "HTTP Request3"
+    }
+  ],
+  "pinData": {
+    "Webhook1": [
+      {
+        "json": {
+          "headers": {
+            "host": "n8n.srv1248804.hstgr.cloud",
+            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 Edg/144.0.0.0",
+            "content-length": "10085",
+            "accept": "*/*",
+            "accept-encoding": "gzip, deflate, br, zstd",
+            "accept-language": "en-US,en;q=0.9",
+            "content-type": "multipart/form-data; boundary=----WebKitFormBoundaryq4Znwe394TLVXeIj",
+            "origin": "https://leads-scrapping.vercel.app",
+            "priority": "u=1, i",
+            "referer": "https://leads-scrapping.vercel.app/",
+            "sec-ch-ua": "\"Not(A:Brand\";v=\"8\", \"Chromium\";v=\"144\", \"Microsoft Edge\";v=\"144\"",
+            "sec-ch-ua-mobile": "?0",
+            "sec-ch-ua-platform": "\"Windows\"",
+            "sec-fetch-dest": "empty",
+            "sec-fetch-mode": "cors",
+            "sec-fetch-site": "cross-site",
+            "x-forwarded-for": "47.11.96.181",
+            "x-forwarded-host": "n8n.srv1248804.hstgr.cloud",
+            "x-forwarded-port": "443",
+            "x-forwarded-proto": "https",
+            "x-forwarded-server": "4fde5d4a3e72",
+            "x-real-ip": "47.11.96.181"
+          },
+          "params": {},
+          "query": {},
+          "body": {
+            "userId": "stqmu9091y0ao59tygb1c6r0",
+            "signatureId": "xj01g8didtv9egzsqpvyk3yd",
+            "signatureName": "Rajan with MICROWEB",
+            "signatureContent": "<p>Best Regards,<br><br>Rajan Dhinoja<br>&nbsp;</p><img class=\"signature-image\" src=\"https://hwcwkmlgvxbetjsmnafv.supabase.co/storage/v1/object/public/signatures/stqmu9091y0ao59tygb1c6r0/6a251e89-187a-4db1-98ae-3ffd8f15f185-1769259841917.png\"><p>Website - <a target=\"_blank\" rel=\"noopener noreferrer\" href=\"www.microwebtec.com\">www.microwebtec.com</a></p>",
+            "signatureCreatedAt": "2026-01-24T13:05:18.493",
+            "signatureUpdatedAt": "2026-01-24T15:24:53.133"
+          },
+          "webhookUrl": "https://n8n.srv1248804.hstgr.cloud/webhook/get-leads",
+          "executionMode": "production"
+        }
+      }
+    ],
+    "Extract from File": [
+      {
+        "json": {
+          "Business Emails": "rajan@microwebtec.com",
+          "Website URLs": "https://nova-tech.io"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Loop Over Items": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Website Data Scrapping",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Website Data Scrapping": {
+      "main": [
+        [
+          {
+            "node": "HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTML": {
+      "main": [
+        [
+          {
+            "node": "AI – Discover Important Pages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI – Company Intelligence Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Basic LLM Chain": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Converting into Structured Output": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Converting into Structured Output1": {
+      "main": [
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a message": {
+      "main": [
+        []
+      ]
+    },
+    "Groq Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [],
+        []
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from File": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook1": {
+      "main": [
+        [
+          {
+            "node": "Extract from File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI – Discover Important Pages",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "HTML2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTML2": {
+      "main": [
+        [
+          {
+            "node": "AI – Extract Company Facts From Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items1": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI – Discover Important Pages": {
+      "main": [
+        [
+          {
+            "node": "Split Out",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser1": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI – Discover Important Pages",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI – Extract Company Facts From Page": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Chat Model2": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI – Extract Company Facts From Page",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI – Company Intelligence Agent": {
+      "main": [
+        [
+          {
+            "node": "Converting into Structured Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript2": {
+      "main": [
+        [
+          {
+            "node": "Wait1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait1": {
+      "main": [
+        [
+          {
+            "node": "AI – Company Intelligence Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email via Graph API": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        []
+      ]
+    },
+    "HTTP Request1": {
+      "main": [
+        [
+          {
+            "node": "Send Email via Graph API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request3": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "1f53f17c-0756-40d7-abc8-67942e7234b2",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "23a0dce48a65256ecf7e493c46234492843f359e0af2a36144db4decd892e175"
+  },
+  "id": "YqfLKfeSBnnDFzQ0YtYul",
+  "tags": [
+    {
+      "updatedAt": "2026-01-06T09:21:15.264Z",
+      "createdAt": "2026-01-06T09:21:15.264Z",
+      "id": "LI4Gkzqy5cytmzrn",
+      "name": "LEADs"
+    }
+  ]
+}

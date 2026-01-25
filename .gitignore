@@ -36,3 +36,4 @@ yarn-error.log*
 next-env.d.ts
 
 # (no Prisma-specific files; Prisma has been removed)
+*.md

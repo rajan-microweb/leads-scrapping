@@ -1,0 +1,23 @@
+{
+  "parameters": {
+    "method": "POST",
+    "url": "=https://hwcwkmlgvxbetjsmnafv.supabase.co/functions/v1/get-all-credentials",
+    "sendHeaders": true,
+    "headerParameters": {
+      "parameters": [
+        {
+          "name": "Authorization",
+          "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh3Y3drbWxndnhiZXRqc21uYWZ2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkxNDgxODQsImV4cCI6MjA4NDcyNDE4NH0.UzJOIL9bp-sy9vXPos86PhCUQZBgqPZBbE4IUXQTnlQ"
+        },
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={\n  \"userId\": \"{{ $('Webhook1').item.json.body.userId }}\",\n  \"includeSecrets\": false\n}",
+    "options": {}
+  }
+}
