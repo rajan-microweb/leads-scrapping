@@ -12,22 +12,15 @@ This function aggregates and returns:
 
 ## Authentication
 
-The function requires authentication via one of the following methods:
+The function requires authentication via the `x-api-key` header:
 
-1. **x-api-key Header** (recommended for n8n integration):
-   ```
-   x-api-key: <N8N_SECRET>
-   ```
-   Set `N8N_SECRET` in your Supabase project's Edge Function secrets.
+```
+x-api-key: <N8N_SECRET>
+```
 
-2. **Service Role Key** (fallback for server-to-server):
-   ```
-   Authorization: Bearer <SUPABASE_SERVICE_ROLE_KEY>
-   ```
-   Or via header:
-   ```
-   apikey: <SUPABASE_SERVICE_ROLE_KEY>
-   ```
+Set `N8N_SECRET` in your Supabase project's Edge Function secrets.
+
+**Note**: Only the `x-api-key` header is supported. Other authentication methods have been removed.
 
 ## Request Format
 
@@ -38,12 +31,6 @@ The function requires authentication via one of the following methods:
 ```
 Content-Type: application/json
 x-api-key: <N8N_SECRET>
-```
-
-**Alternative (Service Role Key):**
-```
-Content-Type: application/json
-Authorization: Bearer <SUPABASE_SERVICE_ROLE_KEY>
 ```
 
 ### Body
@@ -261,18 +248,6 @@ curl -X POST \
   }'
 ```
 
-**Alternative (using service role key):**
-```bash
-curl -X POST \
-  https://<your-project-ref>.supabase.co/functions/v1/get-all-credentials \
-  -H "Authorization: Bearer <SERVICE_ROLE_KEY>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "userId": "user-id-here",
-    "includeSecrets": false
-  }'
-```
-
 ### Using Supabase CLI
 
 ```bash
@@ -291,17 +266,10 @@ supabase start
 # Serve the function locally
 supabase functions serve get-all-credentials
 
-# Test with curl (using x-api-key)
+# Test with curl
 curl -X POST \
   http://localhost:54321/functions/v1/get-all-credentials \
   -H "x-api-key: <N8N_SECRET>" \
-  -H "Content-Type: application/json" \
-  -d '{"userId": "user-id-here"}'
-
-# Or test with service role key
-curl -X POST \
-  http://localhost:54321/functions/v1/get-all-credentials \
-  -H "Authorization: Bearer <SERVICE_ROLE_KEY>" \
   -H "Content-Type: application/json" \
   -d '{"userId": "user-id-here"}'
 ```

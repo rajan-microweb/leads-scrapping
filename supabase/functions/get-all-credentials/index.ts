@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, x-api-key, content-type",
+  "Access-Control-Allow-Headers": "x-api-key, content-type",
 }
 
 interface RequestBody {
@@ -32,28 +32,16 @@ serve(async (req) => {
       )
     }
 
-    // Validate authorization
-    const authHeader = req.headers.get("Authorization")
-    const apiKey = req.headers.get("apikey")
+    // Validate authorization - only x-api-key header with N8N_SECRET
     const xApiKey = req.headers.get("x-api-key")
     
     // Get N8N secret from environment (stored in Supabase secrets)
     const n8nSecret = Deno.env.get("N8N_SECRET")
     
-    // Extract token from Bearer header
-    const bearerToken = authHeader?.startsWith("Bearer ") 
-      ? authHeader.substring(7) 
-      : null
-    
-    // Validate: x-api-key header with N8N_SECRET, or service role key as fallback
-    const isValidAuth = 
-      (xApiKey && xApiKey === n8nSecret) ||
-      (bearerToken && bearerToken === supabaseServiceKey) ||
-      (apiKey && apiKey === supabaseServiceKey)
-
-    if (!isValidAuth) {
+    // Validate: only x-api-key header with N8N_SECRET
+    if (!xApiKey || xApiKey !== n8nSecret) {
       return new Response(
-        JSON.stringify({ error: "Unauthorized. Valid x-api-key header or service role key required." }),
+        JSON.stringify({ error: "Unauthorized. Valid x-api-key header required." }),
         {
           status: 401,
           headers: { ...corsHeaders, "Content-Type": "application/json" },

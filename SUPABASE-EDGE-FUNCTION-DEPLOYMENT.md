@@ -53,23 +53,10 @@ supabase functions invoke get-all-credentials \
 
 ### Using cURL
 
-**Using x-api-key header (recommended for n8n):**
 ```bash
 curl -X POST \
   https://<your-project-ref>.supabase.co/functions/v1/get-all-credentials \
   -H "x-api-key: <N8N_SECRET>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "userId": "your-user-id",
-    "includeSecrets": false
-  }'
-```
-
-**Using service role key (alternative):**
-```bash
-curl -X POST \
-  https://<your-project-ref>.supabase.co/functions/v1/get-all-credentials \
-  -H "Authorization: Bearer <YOUR_SERVICE_ROLE_KEY>" \
   -H "Content-Type: application/json" \
   -d '{
     "userId": "your-user-id",
@@ -99,8 +86,8 @@ For detailed usage instructions, see:
 
 ### Unauthorized Error
 - Verify you're using the correct `x-api-key` header with `N8N_SECRET` value
-- Or verify you're using the correct service role key with `Authorization: Bearer <key>` header
 - Check that the secret was set: `supabase secrets list`
+- Ensure the header name is exactly `x-api-key` (case-sensitive)
 
 ### User Not Found
 - Verify the userId exists in your database
