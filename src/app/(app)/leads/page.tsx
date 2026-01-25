@@ -407,6 +407,33 @@ export default function LeadsPage() {
                     /* continue without company info */
                   }
 
+                  type IntegrationItem = {
+                    id?: string
+                    platformName?: string | null
+                    isConnected?: boolean | null
+                    createdAt?: string | null
+                    updatedAt?: string | null
+                    credentials?: {
+                      clientId?: string | null
+                      clientSecret?: string | null
+                      tenantId?: string | null
+                      encrypted?: unknown
+                      [k: string]: unknown
+                    } | null
+                  }
+                  let integrationsList: IntegrationItem[] = []
+                  try {
+                    const intRes = await fetch("/api/integrations")
+                    if (intRes.ok) {
+                      const data = await intRes.json()
+                      if (Array.isArray(data)) {
+                        integrationsList = data
+                      }
+                    }
+                  } catch {
+                    /* continue without integrations */
+                  }
+
                   formData.append("userId", userId)
 
                   // Personal details – each field separately in webhook body
@@ -452,6 +479,28 @@ export default function LeadsPage() {
                     if (companyInfo.createdAt != null) formData.append("companyCreatedAt", companyInfo.createdAt)
                     if (companyInfo.updatedAt != null) formData.append("companyUpdatedAt", companyInfo.updatedAt)
                   }
+
+                  // Integration details including credentials – each field separately in webhook body
+                  formData.append("integrationCount", String(integrationsList.length))
+                  integrationsList.forEach((int, idx) => {
+                    const p = `integration${idx}_`
+                    if (int.id != null) formData.append(`${p}id`, int.id)
+                    if (int.platformName != null && int.platformName !== "") formData.append(`${p}platformName`, int.platformName)
+                    if (int.isConnected != null) formData.append(`${p}isConnected`, String(int.isConnected))
+                    if (int.createdAt != null) formData.append(`${p}createdAt`, int.createdAt)
+                    if (int.updatedAt != null) formData.append(`${p}updatedAt`, int.updatedAt)
+                    const cred = int.credentials
+                    if (cred && typeof cred === "object") {
+                      const c = cred as Record<string, unknown>
+                      const clientId = c.clientId ?? c.client_id
+                      const clientSecret = c.clientSecret ?? c.client_secret
+                      const tenantId = c.tenantId ?? c.tenant_id
+                      if (clientId != null && String(clientId) !== "") formData.append(`${p}credentialsClientId`, String(clientId))
+                      if (clientSecret != null && String(clientSecret) !== "") formData.append(`${p}credentialsClientSecret`, String(clientSecret))
+                      if (tenantId != null && String(tenantId) !== "") formData.append(`${p}credentialsTenantId`, String(tenantId))
+                      if (c.encrypted != null) formData.append(`${p}credentialsEncrypted`, typeof c.encrypted === "string" ? c.encrypted : JSON.stringify(c.encrypted))
+                    }
+                  })
 
                   let selectedSignature: Signature | null = null
                   if (selectedSignatureId) {
