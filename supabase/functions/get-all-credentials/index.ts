@@ -119,128 +119,59 @@ serve(async (req) => {
       },
     })
 
-    // Fetch personal details
-    const { data: personal, error: personalError } = await supabase
-      .from("User")
-      .select(
-        'id, name, "fullName", email, phone, "jobTitle", country, timezone, image, "avatarUrl", role, "createdAt", "updatedAt"'
-      )
-      .eq("id", userId.trim())
-      .single()
+    // Call the SQL function to get all credentials in a single database call
+    const { data: result, error: rpcError } = await supabase.rpc(
+      "get_all_credentials",
+      {
+        p_user_id: userId.trim(),
+        p_include_secrets: includeSecrets,
+      }
+    )
 
-    if (personalError || !personal) {
+    if (rpcError) {
+      console.error("Error calling get_all_credentials function:", rpcError)
       return new Response(
-        JSON.stringify({ error: "User not found" }),
+        JSON.stringify({
+          error: "Failed to fetch user data",
+          message: rpcError.message,
+        }),
         {
-          status: 404,
+          status: 500,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         }
       )
     }
 
-    // Fetch company details (from my_company_info table)
-    const { data: company, error: companyError } = await supabase
-      .from("my_company_info")
-      .select("*")
-      .eq("userId", userId.trim())
-      .order("createdAt", { ascending: false })
-      .limit(1)
-      .maybeSingle()
-
-    if (companyError) {
-      console.error("Error fetching company info:", companyError)
-      // Continue without company data rather than failing
-    }
-
-    // Fetch website submissions (company intelligence data)
-    const { data: websiteSubmissions, error: websiteError } = await supabase
-      .from("WebsiteSubmission")
-      .select("id, websiteName, websiteUrl, extractedData, createdAt")
-      .eq("userId", userId.trim())
-      .order("createdAt", { ascending: false })
-
-    if (websiteError) {
-      console.error("Error fetching website submissions:", websiteError)
-      // Continue without website submissions
-    }
-
-    // Fetch integration details
-    const { data: integrations, error: integrationsError } = await supabase
-      .from("integrations")
-      .select('id, "platformName", "isConnected", "createdAt", "updatedAt", credentials')
-      .eq("userId", userId.trim())
-
-    if (integrationsError) {
-      console.error("Error fetching integrations:", integrationsError)
-      // Continue without integrations
-    }
-
-    // Process integrations - exclude sensitive credentials unless explicitly requested
-    const processedIntegrations = (integrations || []).map((integration) => {
-      const { credentials, ...rest } = integration
-      
-      if (includeSecrets) {
-        return {
-          ...rest,
-          credentials,
+    // The SQL function returns a JSONB object with the structure:
+    // { success: boolean, userId: string, data: { personal, company, websiteSubmissions, integrations } }
+    // or { success: false, error: string } on error
+    if (!result || typeof result !== "object") {
+      return new Response(
+        JSON.stringify({ error: "Invalid response from database function" }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         }
-      } else {
-        // Return only platform name and connection status, exclude credentials
-        return {
-          ...rest,
-          hasCredentials: !!credentials && Object.keys(credentials).length > 0,
-        }
-      }
-    })
-
-    // Structure the response
-    const response = {
-      success: true,
-      userId: userId.trim(),
-      data: {
-        personal: {
-          id: personal.id,
-          name: personal.name,
-          fullName: personal.fullName,
-          email: personal.email,
-          phone: personal.phone,
-          jobTitle: personal.jobTitle,
-          country: personal.country,
-          timezone: personal.timezone,
-          image: personal.image,
-          avatarUrl: personal.avatarUrl,
-          role: personal.role,
-          createdAt: personal.createdAt,
-          updatedAt: personal.updatedAt,
-        },
-        company: company
-          ? {
-              id: company.id,
-              websiteName: company.websiteName,
-              websiteUrl: company.websiteUrl,
-              companyName: company.companyName,
-              companyType: company.companyType,
-              industryExpertise: company.industryExpertise,
-              fullTechSummary: company.fullTechSummary,
-              serviceCatalog: company.serviceCatalog,
-              theHook: company.theHook,
-              whatTheyDo: company.whatTheyDo,
-              valueProposition: company.valueProposition,
-              brandTone: company.brandTone,
-              createdAt: company.createdAt,
-              updatedAt: company.updatedAt,
-            }
-          : null,
-        websiteSubmissions: (websiteSubmissions || []).map((submission) => ({
-          id: submission.id,
-          websiteName: submission.websiteName,
-          websiteUrl: submission.websiteUrl,
-          extractedData: submission.extractedData,
-          createdAt: submission.createdAt,
-        })),
-        integrations: processedIntegrations,
-      },
+      )
     }
+
+    // Check if the SQL function returned an error
+    if (result.success === false) {
+      const statusCode = result.error === "User not found" ? 404 : 400
+      return new Response(
+        JSON.stringify({
+          error: result.error || "Unknown error",
+          message: result.message,
+        }),
+        {
+          status: statusCode,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      )
+    }
+
+    // Return the response from the SQL function (already in the correct format)
+    const response = result
 
     return new Response(JSON.stringify(response, null, 2), {
       status: 200,
