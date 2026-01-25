@@ -1,0 +1,3 @@
+# Ignore Supabase Edge Functions directory
+# These are Deno-based functions and should not be compiled by Next.js
+supabase/
