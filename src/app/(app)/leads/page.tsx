@@ -379,6 +379,34 @@ export default function LeadsPage() {
                     /* continue without userId */
                   }
 
+                  let companyInfo: {
+                    id?: string
+                    websiteName?: string | null
+                    websiteUrl?: string | null
+                    companyName?: string | null
+                    companyType?: string | null
+                    industryExpertise?: string | string[] | null
+                    fullTechSummary?: string | string[] | null
+                    serviceCatalog?: string[] | null
+                    theHook?: string | null
+                    whatTheyDo?: string | null
+                    valueProposition?: string | null
+                    brandTone?: string[] | null
+                    createdAt?: string | null
+                    updatedAt?: string | null
+                  } | null = null
+                  try {
+                    const companyRes = await fetch("/api/my-company-info")
+                    if (companyRes.ok) {
+                      const data = await companyRes.json()
+                      if (data && !data.error && data.id) {
+                        companyInfo = data
+                      }
+                    }
+                  } catch {
+                    /* continue without company info */
+                  }
+
                   formData.append("userId", userId)
 
                   // Personal details – each field separately in webhook body
@@ -395,6 +423,34 @@ export default function LeadsPage() {
                     if (userProfile.avatarUrl != null && userProfile.avatarUrl !== "") formData.append("personalAvatarUrl", userProfile.avatarUrl)
                     if (userProfile.createdAt != null) formData.append("personalCreatedAt", userProfile.createdAt)
                     if (userProfile.updatedAt != null) formData.append("personalUpdatedAt", userProfile.updatedAt)
+                  }
+
+                  // Company details – each field separately in webhook body
+                  if (companyInfo) {
+                    if (companyInfo.id != null) formData.append("companyId", companyInfo.id)
+                    if (companyInfo.websiteName != null && companyInfo.websiteName !== "") formData.append("companyWebsiteName", companyInfo.websiteName)
+                    if (companyInfo.websiteUrl != null && companyInfo.websiteUrl !== "") formData.append("companyWebsiteUrl", companyInfo.websiteUrl)
+                    if (companyInfo.companyName != null && companyInfo.companyName !== "") formData.append("companyName", companyInfo.companyName)
+                    if (companyInfo.companyType != null && companyInfo.companyType !== "") formData.append("companyType", companyInfo.companyType)
+                    if (companyInfo.theHook != null && companyInfo.theHook !== "") formData.append("companyTheHook", companyInfo.theHook)
+                    if (companyInfo.whatTheyDo != null && companyInfo.whatTheyDo !== "") formData.append("companyWhatTheyDo", companyInfo.whatTheyDo)
+                    if (companyInfo.valueProposition != null && companyInfo.valueProposition !== "") formData.append("companyValueProposition", companyInfo.valueProposition)
+                    if (companyInfo.industryExpertise != null) {
+                      const v = companyInfo.industryExpertise
+                      formData.append("companyIndustryExpertise", typeof v === "string" ? v : JSON.stringify(v))
+                    }
+                    if (companyInfo.fullTechSummary != null) {
+                      const v = companyInfo.fullTechSummary
+                      formData.append("companyFullTechSummary", typeof v === "string" ? v : JSON.stringify(v))
+                    }
+                    if (companyInfo.serviceCatalog != null && companyInfo.serviceCatalog.length > 0) {
+                      formData.append("companyServiceCatalog", JSON.stringify(companyInfo.serviceCatalog))
+                    }
+                    if (companyInfo.brandTone != null && companyInfo.brandTone.length > 0) {
+                      formData.append("companyBrandTone", JSON.stringify(companyInfo.brandTone))
+                    }
+                    if (companyInfo.createdAt != null) formData.append("companyCreatedAt", companyInfo.createdAt)
+                    if (companyInfo.updatedAt != null) formData.append("companyUpdatedAt", companyInfo.updatedAt)
                   }
 
                   let selectedSignature: Signature | null = null
