@@ -177,7 +177,7 @@ export function IntegrationCard({ name, platformName, description, Icon, onConne
       if (typeof url !== "string" || !url) {
         throw new Error("Invalid response")
       }
-      window.location.href = url
+      window.open(url, "_blank", "noopener,noreferrer,width=600,height=700")
     } catch (err) {
       setRedirectError(err instanceof Error ? err.message : "Something went wrong")
     } finally {
@@ -273,7 +273,7 @@ export function IntegrationCard({ name, platformName, description, Icon, onConne
                 onClick={handleOutlookConnect}
                 disabled={isRedirecting}
               >
-                {isRedirecting ? "Redirecting..." : "Connect"}
+                {isRedirecting ? "Opening..." : "Connect"}
               </Button>
               {redirectError && (
                 <p className="text-xs text-red-600">{redirectError}</p>
