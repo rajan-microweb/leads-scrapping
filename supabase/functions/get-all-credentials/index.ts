@@ -78,14 +78,18 @@ serve(async (req) => {
     // Parse request body
     let body: RequestBody
     try {
-      body = await req.json()
+      const parsed = await req.json()
+      if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+        return new Response(
+          JSON.stringify({ error: "Request body must be a JSON object" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        )
+      }
+      body = parsed as RequestBody
     } catch {
       return new Response(
         JSON.stringify({ error: "Invalid JSON in request body" }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       )
     }
 

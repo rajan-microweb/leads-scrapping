@@ -1,0 +1,76 @@
+-- get_all_credentials: fetches user, company, website submissions, and integrations in one call.
+-- Used by the get-all-credentials Edge Function. Run get-all-credentials.sql for full version with comments.
+
+CREATE OR REPLACE FUNCTION get_all_credentials(
+  p_user_id TEXT,
+  p_include_secrets BOOLEAN DEFAULT false
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_personal JSONB;
+  v_company JSONB;
+  v_website_submissions JSONB;
+  v_integrations JSONB;
+  v_result JSONB;
+  v_user_exists BOOLEAN;
+BEGIN
+  IF p_user_id IS NULL OR TRIM(p_user_id) = '' THEN
+    RETURN jsonb_build_object('success', false, 'error', 'userId is required and must be a non-empty string');
+  END IF;
+
+  SELECT EXISTS(SELECT 1 FROM "User" WHERE id = TRIM(p_user_id)) INTO v_user_exists;
+  IF NOT v_user_exists THEN
+    RETURN jsonb_build_object('success', false, 'error', 'User not found');
+  END IF;
+
+  SELECT jsonb_build_object(
+    'id', id, 'name', name, 'fullName', "fullName", 'email', email, 'phone', phone,
+    'jobTitle', "jobTitle", 'country', country, 'timezone', timezone, 'image', image,
+    'avatarUrl', "avatarUrl", 'role', role, 'createdAt', "createdAt", 'updatedAt', "updatedAt"
+  ) INTO v_personal FROM "User" WHERE id = TRIM(p_user_id);
+
+  SELECT jsonb_build_object(
+    'id', id, 'websiteName', "websiteName", 'websiteUrl', "websiteUrl", 'companyName', "companyName",
+    'companyType', "companyType", 'industryExpertise', "industryExpertise", 'fullTechSummary', "fullTechSummary",
+    'serviceCatalog', "serviceCatalog", 'theHook', "theHook", 'whatTheyDo', "whatTheyDo",
+    'valueProposition', "valueProposition", 'brandTone', "brandTone", 'createdAt', "createdAt", 'updatedAt', "updatedAt"
+  ) INTO v_company FROM my_company_info WHERE "userId" = TRIM(p_user_id) ORDER BY "createdAt" DESC LIMIT 1;
+
+  SELECT COALESCE(jsonb_agg(jsonb_build_object('id', id, 'websiteName', "websiteName", 'websiteUrl', "websiteUrl", 'extractedData', "extractedData", 'createdAt', "createdAt") ORDER BY "createdAt" DESC), '[]'::jsonb)
+  INTO v_website_submissions FROM "WebsiteSubmission" WHERE "userId" = TRIM(p_user_id);
+
+  IF p_include_secrets THEN
+    SELECT COALESCE(jsonb_agg(jsonb_build_object('id', id, 'platformName', "platformName", 'isConnected', "isConnected", 'credentials', credentials, 'createdAt', "createdAt", 'updatedAt', "updatedAt")), '[]'::jsonb)
+    INTO v_integrations FROM integrations WHERE "userId" = TRIM(p_user_id);
+  ELSE
+    SELECT COALESCE(jsonb_agg(
+      jsonb_build_object(
+        'id', id, 'platformName', "platformName", 'isConnected', "isConnected",
+        'hasCredentials', (credentials IS NOT NULL AND jsonb_typeof(credentials) = 'object' AND credentials != '{}'::jsonb),
+        'createdAt', "createdAt", 'updatedAt', "updatedAt"
+      )
+    ), '[]'::jsonb)
+    INTO v_integrations FROM integrations WHERE "userId" = TRIM(p_user_id);
+  END IF;
+
+  v_result := jsonb_build_object(
+    'success', true, 'userId', TRIM(p_user_id),
+    'data', jsonb_build_object(
+      'personal', v_personal,
+      'company', COALESCE(v_company, 'null'::jsonb),
+      'websiteSubmissions', COALESCE(v_website_submissions, '[]'::jsonb),
+      'integrations', COALESCE(v_integrations, '[]'::jsonb)
+    )
+  );
+  RETURN v_result;
+
+EXCEPTION WHEN OTHERS THEN
+  RETURN jsonb_build_object('success', false, 'error', 'Internal server error', 'message', SQLERRM);
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION get_all_credentials(TEXT, BOOLEAN) TO authenticated;
+GRANT EXECUTE ON FUNCTION get_all_credentials(TEXT, BOOLEAN) TO service_role;

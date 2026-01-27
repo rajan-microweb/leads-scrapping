@@ -121,12 +121,11 @@ BEGIN
         'id', id,
         'platformName', "platformName",
         'isConnected', "isConnected",
-        'hasCredentials', CASE 
-          WHEN credentials IS NOT NULL AND jsonb_typeof(credentials) = 'object' 
-            AND jsonb_object_keys(credentials) IS NOT NULL 
-          THEN true 
-          ELSE false 
-        END,
+        'hasCredentials', (
+          credentials IS NOT NULL
+          AND jsonb_typeof(credentials) = 'object'
+          AND credentials != '{}'::jsonb
+        ),
         'createdAt', "createdAt",
         'updatedAt', "updatedAt"
       )
