@@ -1,7 +1,9 @@
 "use client"
 
-import { useState, FormEvent, useEffect } from "react"
+import { useState, FormEvent, useEffect, useRef } from "react"
 
+import { ConnectionSuccessDialog } from "@/components/connection-success-dialog"
+import { IntegrationDetails } from "@/components/integration-details"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -38,6 +40,10 @@ export function IntegrationCard({ name, platformName, description, Icon, onConne
   const [isLoadingStatus, setIsLoadingStatus] = useState(true)
   const [isRedirecting, setIsRedirecting] = useState(false)
   const [redirectError, setRedirectError] = useState<string | null>(null)
+  const [metadata, setMetadata] = useState<Record<string, unknown> | null>(null)
+  const [successDialogOpen, setSuccessDialogOpen] = useState(false)
+  const [isPendingConnection, setIsPendingConnection] = useState(false)
+  const outlookPopupRef = useRef<Window | null>(null)
 
   // Fetch integration status on mount
   useEffect(() => {
@@ -47,12 +53,13 @@ export function IntegrationCard({ name, platformName, description, Icon, onConne
         if (response.ok) {
           const integrations = await response.json()
           const integration = integrations.find(
-            (int: { platformName: string; isConnected: boolean }) =>
+            (int: { platformName: string; isConnected: boolean; metadata?: Record<string, unknown> | null }) =>
               int.platformName === platformName && int.isConnected
           )
           if (integration) {
             setIsConnected(true)
             setIntegrationId(integration.id)
+            setMetadata(integration.metadata ?? null)
           }
         }
       } catch (err) {
@@ -64,6 +71,50 @@ export function IntegrationCard({ name, platformName, description, Icon, onConne
 
     fetchIntegrationStatus()
   }, [platformName])
+
+  // Outlook: poll for DB update after OAuth popup is opened
+  useEffect(() => {
+    if (!isPendingConnection || platformName !== "outlook") return
+
+    const POLL_MS = 2500
+    const TIMEOUT_MS = 10 * 60 * 1000
+    const startedAt = Date.now()
+
+    const id = setInterval(async () => {
+      if (outlookPopupRef.current?.closed) {
+        clearInterval(id)
+        setIsPendingConnection(false)
+        return
+      }
+      if (Date.now() - startedAt > TIMEOUT_MS) {
+        clearInterval(id)
+        setIsPendingConnection(false)
+        return
+      }
+      try {
+        const res = await fetch("/api/integrations")
+        if (!res.ok) return
+        const integrations = await res.json()
+        const found = integrations.find(
+          (int: { platformName: string; isConnected: boolean; metadata?: Record<string, unknown> | null }) =>
+            int.platformName === "outlook" && int.isConnected
+        )
+        if (found) {
+          clearInterval(id)
+          setIsConnected(true)
+          setIntegrationId(found.id)
+          setMetadata(found.metadata ?? null)
+          setIsPendingConnection(false)
+          setSuccessDialogOpen(true)
+          onConnectionChange?.()
+        }
+      } catch {
+        // ignore, will retry next tick
+      }
+    }, POLL_MS)
+
+    return () => clearInterval(id)
+  }, [isPendingConnection, platformName, onConnectionChange])
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault()
@@ -110,13 +161,40 @@ export function IntegrationCard({ name, platformName, description, Icon, onConne
         throw new Error(data.error || "Failed to connect integration")
       }
 
-      // Success: reset form & close dialog
+      // Re-fetch from DB to confirm persisted state and get metadata
+      try {
+        const refetch = await fetch("/api/integrations")
+        if (refetch.ok) {
+          const integrations = await refetch.json()
+          const found = integrations.find(
+            (int: { platformName: string; isConnected: boolean; metadata?: Record<string, unknown> | null }) =>
+              int.platformName === platformName && int.isConnected
+          )
+          if (found) {
+            setIsConnected(true)
+            setIntegrationId(found.id)
+            setMetadata(found.metadata ?? null)
+          } else {
+            setIsConnected(true)
+            setIntegrationId(data.id)
+            setMetadata(null)
+          }
+        } else {
+          setIsConnected(true)
+          setIntegrationId(data.id)
+          setMetadata(null)
+        }
+      } catch {
+        setIsConnected(true)
+        setIntegrationId(data.id)
+        setMetadata(null)
+      }
+
       setClientId("")
       setClientSecret("")
       setTenantId("")
       setOpen(false)
-      setIsConnected(true)
-      setIntegrationId(data.id)
+      setSuccessDialogOpen(true)
       onConnectionChange?.()
     } catch (err) {
       setErrors({
@@ -152,6 +230,7 @@ export function IntegrationCard({ name, platformName, description, Icon, onConne
       setDeleteDialogOpen(false)
       setIsConnected(false)
       setIntegrationId(null)
+      setMetadata(null)
       onConnectionChange?.()
     } catch (err) {
       setErrors({
@@ -166,6 +245,7 @@ export function IntegrationCard({ name, platformName, description, Icon, onConne
     if (platformName !== "outlook") return
     setIsRedirecting(true)
     setRedirectError(null)
+    outlookPopupRef.current = null
     try {
       const res = await fetch("/api/integrations/outlook-oauth-url")
       if (!res.ok) {
@@ -177,7 +257,14 @@ export function IntegrationCard({ name, platformName, description, Icon, onConne
       if (typeof url !== "string" || !url) {
         throw new Error("Invalid response")
       }
-      window.open(url, "_blank", "noopener,noreferrer,width=600,height=700")
+      const popup = window.open(url, "_blank", "noopener,noreferrer,width=600,height=700")
+      if (popup == null) {
+        setRedirectError("Popup was blocked. Please allow popups and try again.")
+        return
+      }
+      outlookPopupRef.current = popup
+      setIsRedirecting(false)
+      setIsPendingConnection(true)
     } catch (err) {
       setRedirectError(err instanceof Error ? err.message : "Something went wrong")
     } finally {
@@ -186,6 +273,7 @@ export function IntegrationCard({ name, platformName, description, Icon, onConne
   }
 
   return (
+    <>
     <Dialog open={open} onOpenChange={setOpen}>
       <Card className="flex items-center justify-between gap-4 border-border/70 bg-background">
         <CardContent className="flex w-full items-center justify-between gap-4 py-4">
@@ -219,6 +307,9 @@ export function IntegrationCard({ name, platformName, description, Icon, onConne
               <div className="text-sm font-medium leading-none">{name}</div>
               {description && (
                 <p className="text-xs text-muted-foreground max-w-md">{description}</p>
+              )}
+              {isConnected && (
+                <IntegrationDetails metadata={metadata} platformName={platformName} />
               )}
             </div>
           </div>
@@ -271,9 +362,9 @@ export function IntegrationCard({ name, platformName, description, Icon, onConne
               <Button
                 size="sm"
                 onClick={handleOutlookConnect}
-                disabled={isRedirecting}
+                disabled={isRedirecting || isPendingConnection}
               >
-                {isRedirecting ? "Opening..." : "Connect"}
+                {isRedirecting ? "Opening..." : isPendingConnection ? "Connecting..." : "Connect"}
               </Button>
               {redirectError && (
                 <p className="text-xs text-red-600">{redirectError}</p>
@@ -356,6 +447,13 @@ export function IntegrationCard({ name, platformName, description, Icon, onConne
       </DialogContent>
       )}
     </Dialog>
+    <ConnectionSuccessDialog
+      open={successDialogOpen}
+      onOpenChange={setSuccessDialogOpen}
+      platformDisplayName={name}
+      duration={5}
+    />
+    </>
   )
 }
 

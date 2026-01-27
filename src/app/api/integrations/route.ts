@@ -13,7 +13,7 @@ export async function GET() {
 
     const { data: integrations, error } = await supabaseAdmin
       .from('integrations')
-      .select('id, "platformName", "isConnected", "createdAt", "updatedAt", credentials')
+      .select('id, "platformName", "isConnected", "createdAt", "updatedAt", credentials, metadata')
       .eq('userId', session.user.id)
 
     if (error) {
