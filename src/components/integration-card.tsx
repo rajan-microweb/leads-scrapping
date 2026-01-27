@@ -4,7 +4,7 @@ import { useState, FormEvent, useEffect, useRef } from "react"
 
 import { ConnectionSuccessDialog } from "@/components/connection-success-dialog"
 import { IntegrationDetails } from "@/components/integration-details"
-import { Card, CardContent } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -45,21 +45,28 @@ export function IntegrationCard({ name, platformName, description, Icon, onConne
   const [isPendingConnection, setIsPendingConnection] = useState(false)
   const outlookPopupRef = useRef<Window | null>(null)
 
-  // Fetch integration status on mount
+  // Fetch integration status from DB on mount. /api/integrations returns only the current
+  // user's integrations (filtered by userId). No row for this platform → Connect; row
+  // with isConnected for this platform → Disconnect.
   useEffect(() => {
     const fetchIntegrationStatus = async () => {
       try {
         const response = await fetch("/api/integrations")
         if (response.ok) {
-          const integrations = await response.json()
-          const integration = integrations.find(
-            (int: { platformName: string; isConnected: boolean; metadata?: Record<string, unknown> | null }) =>
+          const raw = await response.json()
+          const list = Array.isArray(raw) ? raw : []
+          const integration = list.find(
+            (int: { platformName: string; isConnected: boolean; id?: string; metadata?: Record<string, unknown> | null }) =>
               int.platformName === platformName && int.isConnected
           )
           if (integration) {
             setIsConnected(true)
-            setIntegrationId(integration.id)
+            setIntegrationId(integration.id ?? null)
             setMetadata(integration.metadata ?? null)
+          } else {
+            setIsConnected(false)
+            setIntegrationId(null)
+            setMetadata(null)
           }
         }
       } catch (err) {
@@ -94,9 +101,10 @@ export function IntegrationCard({ name, platformName, description, Icon, onConne
       try {
         const res = await fetch("/api/integrations")
         if (!res.ok) return
-        const integrations = await res.json()
-        const found = integrations.find(
-          (int: { platformName: string; isConnected: boolean; metadata?: Record<string, unknown> | null }) =>
+        const raw = await res.json()
+        const list = Array.isArray(raw) ? raw : []
+        const found = list.find(
+          (int: { platformName: string; isConnected: boolean; id?: string; metadata?: Record<string, unknown> | null }) =>
             int.platformName === "outlook" && int.isConnected
         )
         if (found) {
@@ -161,18 +169,19 @@ export function IntegrationCard({ name, platformName, description, Icon, onConne
         throw new Error(data.error || "Failed to connect integration")
       }
 
-      // Re-fetch from DB to confirm persisted state and get metadata
+      // Re-fetch from DB (user-scoped by /api/integrations) to confirm persisted state and get metadata
       try {
-        const refetch = await fetch("/api/integrations")
-        if (refetch.ok) {
-          const integrations = await refetch.json()
-          const found = integrations.find(
-            (int: { platformName: string; isConnected: boolean; metadata?: Record<string, unknown> | null }) =>
+        const refetchRes = await fetch("/api/integrations")
+        if (refetchRes.ok) {
+          const raw = await refetchRes.json()
+          const list = Array.isArray(raw) ? raw : []
+          const found = list.find(
+            (int: { platformName: string; isConnected: boolean; id?: string; metadata?: Record<string, unknown> | null }) =>
               int.platformName === platformName && int.isConnected
           )
           if (found) {
             setIsConnected(true)
-            setIntegrationId(found.id)
+            setIntegrationId(found.id ?? data.id)
             setMetadata(found.metadata ?? null)
           } else {
             setIsConnected(true)
@@ -274,45 +283,43 @@ export function IntegrationCard({ name, platformName, description, Icon, onConne
 
   return (
     <>
-    <Dialog open={open} onOpenChange={setOpen}>
-      <Card className="flex items-center justify-between gap-4 border-border/70 bg-background">
-        <CardContent className="flex w-full items-center justify-between gap-4 py-4">
-          <div className="flex items-center gap-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-md bg-white border border-border overflow-hidden p-1.5">
-              {Icon ? (
-                <Icon className="h-5 w-5" aria-hidden="true" />
-              ) : platformName === "outlook" ? (
-                <img
-                  src="https://img.icons8.com/fluency/48/microsoft-outlook-2019.png"
-                  alt={`${name} logo`}
-                  className="h-full w-full object-contain"
-                  onError={(e) => {
-                    // Fallback to colored O if image fails
-                    const target = e.target as HTMLImageElement
-                    target.style.display = "none"
-                    const parent = target.parentElement
-                    if (parent && !parent.querySelector(".outlook-fallback")) {
-                      const fallback = document.createElement("div")
-                      fallback.className = "outlook-fallback h-full w-full flex items-center justify-center rounded bg-[#0078D4] text-white text-xs font-bold"
-                      fallback.textContent = "O"
-                      parent.appendChild(fallback)
-                    }
-                  }}
-                />
-              ) : (
-                <span className="text-base font-semibold">O</span>
-              )}
+    <div className="space-y-3">
+      <Dialog open={open} onOpenChange={setOpen}>
+        <Card className="flex items-center justify-between gap-4 border-border/70 bg-background">
+          <CardContent className="flex w-full items-center justify-between gap-4 py-4">
+            <div className="flex items-center gap-4">
+              <div className="flex h-10 w-10 items-center justify-center rounded-md bg-white border border-border overflow-hidden p-1.5">
+                {Icon ? (
+                  <Icon className="h-5 w-5" aria-hidden="true" />
+                ) : platformName === "outlook" ? (
+                  <img
+                    src="https://img.icons8.com/fluency/48/microsoft-outlook-2019.png"
+                    alt={`${name} logo`}
+                    className="h-full w-full object-contain"
+                    onError={(e) => {
+                      // Fallback to colored O if image fails
+                      const target = e.target as HTMLImageElement
+                      target.style.display = "none"
+                      const parent = target.parentElement
+                      if (parent && !parent.querySelector(".outlook-fallback")) {
+                        const fallback = document.createElement("div")
+                        fallback.className = "outlook-fallback h-full w-full flex items-center justify-center rounded bg-[#0078D4] text-white text-xs font-bold"
+                        fallback.textContent = "O"
+                        parent.appendChild(fallback)
+                      }
+                    }}
+                  />
+                ) : (
+                  <span className="text-base font-semibold">O</span>
+                )}
+              </div>
+              <div className="space-y-0.5">
+                <div className="text-sm font-medium leading-none">{name}</div>
+                {description && (
+                  <p className="text-xs text-muted-foreground max-w-md">{description}</p>
+                )}
+              </div>
             </div>
-            <div className="space-y-0.5">
-              <div className="text-sm font-medium leading-none">{name}</div>
-              {description && (
-                <p className="text-xs text-muted-foreground max-w-md">{description}</p>
-              )}
-              {isConnected && (
-                <IntegrationDetails metadata={metadata} platformName={platformName} />
-              )}
-            </div>
-          </div>
 
           {isLoadingStatus ? (
             <Button size="sm" disabled>
@@ -446,7 +453,24 @@ export function IntegrationCard({ name, platformName, description, Icon, onConne
         </form>
       </DialogContent>
       )}
-    </Dialog>
+      </Dialog>
+
+      {isConnected && (
+        <Card className="border-border/70 bg-background">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">{name} profile</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <IntegrationDetails
+              metadata={metadata}
+              platformName={platformName}
+              hideTitle
+              emptyMessage="No profile details available."
+            />
+          </CardContent>
+        </Card>
+      )}
+    </div>
     <ConnectionSuccessDialog
       open={successDialogOpen}
       onOpenChange={setSuccessDialogOpen}

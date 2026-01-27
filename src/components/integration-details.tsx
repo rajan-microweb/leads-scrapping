@@ -11,15 +11,19 @@ const ALLOWED_KEYS = [
 type IntegrationDetailsProps = {
   metadata: Record<string, unknown> | null | undefined
   platformName?: string
+  /** When true, omits the "Connected account" heading (e.g. when used inside a card with its own title) */
+  hideTitle?: boolean
+  /** Shown when there are no displayable profile entries */
+  emptyMessage?: string
 }
 
 function isDisplayable(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0
 }
 
-export function IntegrationDetails({ metadata, platformName: _platformName }: IntegrationDetailsProps) {
+export function IntegrationDetails({ metadata, platformName: _platformName, hideTitle, emptyMessage }: IntegrationDetailsProps) {
   if (metadata == null || typeof metadata !== "object" || Array.isArray(metadata)) {
-    return null
+    return emptyMessage ? <p className="text-sm text-muted-foreground">{emptyMessage}</p> : null
   }
 
   const entries: { label: string; value: string }[] = []
@@ -32,12 +36,14 @@ export function IntegrationDetails({ metadata, platformName: _platformName }: In
   }
 
   if (entries.length === 0) {
-    return null
+    return emptyMessage ? <p className="text-sm text-muted-foreground">{emptyMessage}</p> : null
   }
 
   return (
-    <div className="space-y-1 pt-1">
-      <p className="text-xs font-medium text-muted-foreground">Connected account</p>
+    <div className={hideTitle ? "space-y-0.5" : "space-y-1 pt-1"}>
+      {!hideTitle && (
+        <p className="text-xs font-medium text-muted-foreground">Connected account</p>
+      )}
       <ul className="space-y-0.5 text-xs text-muted-foreground">
         {entries.map(({ label, value }) => (
           <li key={label}>
