@@ -36,6 +36,8 @@ export function IntegrationCard({ name, platformName, description, Icon, onConne
   const [isConnected, setIsConnected] = useState(false)
   const [integrationId, setIntegrationId] = useState<string | null>(null)
   const [isLoadingStatus, setIsLoadingStatus] = useState(true)
+  const [isRedirecting, setIsRedirecting] = useState(false)
+  const [redirectError, setRedirectError] = useState<string | null>(null)
 
   // Fetch integration status on mount
   useEffect(() => {
@@ -160,6 +162,29 @@ export function IntegrationCard({ name, platformName, description, Icon, onConne
     }
   }
 
+  const handleOutlookConnect = async () => {
+    if (platformName !== "outlook") return
+    setIsRedirecting(true)
+    setRedirectError(null)
+    try {
+      const res = await fetch("/api/integrations/outlook-oauth-url")
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || "Failed to get authorization URL")
+      }
+      const data = await res.json()
+      const url = data?.url
+      if (typeof url !== "string" || !url) {
+        throw new Error("Invalid response")
+      }
+      window.location.href = url
+    } catch (err) {
+      setRedirectError(err instanceof Error ? err.message : "Something went wrong")
+    } finally {
+      setIsRedirecting(false)
+    }
+  }
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <Card className="flex items-center justify-between gap-4 border-border/70 bg-background">
@@ -241,6 +266,19 @@ export function IntegrationCard({ name, platformName, description, Icon, onConne
                 </DialogFooter>
               </DialogContent>
             </Dialog>
+          ) : platformName === "outlook" ? (
+            <div className="flex flex-col items-end gap-1">
+              <Button
+                size="sm"
+                onClick={handleOutlookConnect}
+                disabled={isRedirecting}
+              >
+                {isRedirecting ? "Redirecting..." : "Connect"}
+              </Button>
+              {redirectError && (
+                <p className="text-xs text-red-600">{redirectError}</p>
+              )}
+            </div>
           ) : (
             <DialogTrigger asChild>
               <Button size="sm">Connect</Button>
@@ -249,6 +287,7 @@ export function IntegrationCard({ name, platformName, description, Icon, onConne
         </CardContent>
       </Card>
 
+      {platformName !== "outlook" && (
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Connect {name}</DialogTitle>
@@ -315,6 +354,7 @@ export function IntegrationCard({ name, platformName, description, Icon, onConne
           </DialogFooter>
         </form>
       </DialogContent>
+      )}
     </Dialog>
   )
 }
