@@ -12,15 +12,13 @@ This function aggregates and returns:
 
 ## Authentication
 
-The function requires authentication via the `x-api-key` header:
+Same as `store-integration`: use `Authorization: Bearer <token>`. The expected token is (in order): `STORE_INTEGRATION_SECRET`, `N8N_SECRET`, or `SUPABASE_ANON_KEY`.
 
 ```
-x-api-key: <N8N_SECRET>
+Authorization: Bearer <N8N_SECRET or STORE_INTEGRATION_SECRET or SUPABASE_ANON_KEY>
 ```
 
-Set `N8N_SECRET` in your Supabase project's Edge Function secrets.
-
-**Note**: Only the `x-api-key` header is supported. Other authentication methods have been removed.
+Set at least one of these in your Supabase project's Edge Function secrets.
 
 ## Request Format
 
@@ -30,7 +28,7 @@ Set `N8N_SECRET` in your Supabase project's Edge Function secrets.
 ### Headers
 ```
 Content-Type: application/json
-x-api-key: <N8N_SECRET>
+Authorization: Bearer <N8N_SECRET or STORE_INTEGRATION_SECRET or SUPABASE_ANON_KEY>
 ```
 
 ### Body
@@ -119,7 +117,7 @@ x-api-key: <N8N_SECRET>
 **401 Unauthorized** - Invalid or missing authentication:
 ```json
 {
-  "error": "Unauthorized. Valid authorization header or API key required."
+  "error": "Unauthorized. Bearer token required."
 }
 ```
 
@@ -158,9 +156,10 @@ The function uses these environment variables (automatically available):
 - `SUPABASE_URL` - Your Supabase project URL
 - `SUPABASE_SERVICE_ROLE_KEY` - Service role key (automatically injected)
 
-Required (for n8n integration):
+Required (for n8n integration). Use one of (in priority order): `STORE_INTEGRATION_SECRET`, `N8N_SECRET`, or `SUPABASE_ANON_KEY`:
 ```bash
 supabase secrets set N8N_SECRET=your-secure-secret-key-here
+# or: STORE_INTEGRATION_SECRET=... or rely on SUPABASE_ANON_KEY
 ```
 
 ## Usage in n8n
@@ -171,7 +170,7 @@ supabase secrets set N8N_SECRET=your-secure-secret-key-here
 2. **URL**: `https://<your-project-ref>.supabase.co/functions/v1/get-all-credentials`
 3. **Headers**:
    - `Content-Type`: `application/json`
-   - `x-api-key`: `<N8N_SECRET>` (the value you set in Supabase secrets)
+   - `Authorization`: `Bearer <N8N_SECRET or STORE_INTEGRATION_SECRET or SUPABASE_ANON_KEY>`
 4. **Body** (JSON):
    ```json
    {
@@ -195,8 +194,8 @@ supabase secrets set N8N_SECRET=your-secure-secret-key-here
         "headerParameters": {
           "parameters": [
             {
-              "name": "x-api-key",
-              "value": "YOUR_N8N_SECRET"
+              "name": "Authorization",
+              "value": "Bearer YOUR_N8N_SECRET"
             },
             {
               "name": "Content-Type",
@@ -240,7 +239,7 @@ supabase secrets set N8N_SECRET=your-secure-secret-key-here
 ```bash
 curl -X POST \
   https://<your-project-ref>.supabase.co/functions/v1/get-all-credentials \
-  -H "x-api-key: <N8N_SECRET>" \
+  -H "Authorization: Bearer <N8N_SECRET or STORE_INTEGRATION_SECRET or SUPABASE_ANON_KEY>" \
   -H "Content-Type: application/json" \
   -d '{
     "userId": "user-id-here",
@@ -269,7 +268,7 @@ supabase functions serve get-all-credentials
 # Test with curl
 curl -X POST \
   http://localhost:54321/functions/v1/get-all-credentials \
-  -H "x-api-key: <N8N_SECRET>" \
+  -H "Authorization: Bearer <N8N_SECRET or STORE_INTEGRATION_SECRET or SUPABASE_ANON_KEY>" \
   -H "Content-Type: application/json" \
   -d '{"userId": "user-id-here"}'
 ```

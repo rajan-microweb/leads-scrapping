@@ -32,50 +32,41 @@ serve(async (req) => {
       )
     }
 
-    // Validate authorization - Authorization: Bearer <SUPABASE_ANON_KEY>
-    const authHeader = req.headers.get("Authorization")
-    
-    // Get Supabase Anon Key from environment
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? ""
-    
-    if (!supabaseAnonKey) {
-      console.error("SUPABASE_ANON_KEY is not set in environment")
+    // Validate authorization - same as store-integration: STORE_INTEGRATION_SECRET, N8N_SECRET, or SUPABASE_ANON_KEY
+    const expectedToken = (
+      Deno.env.get("STORE_INTEGRATION_SECRET") ??
+      Deno.env.get("N8N_SECRET") ??
+      Deno.env.get("SUPABASE_ANON_KEY") ??
+      ""
+    ).trim()
+    if (!expectedToken) {
       return new Response(
-        JSON.stringify({ error: "Server configuration error: SUPABASE_ANON_KEY not configured" }),
+        JSON.stringify({ error: "Server configuration error: no authorization key configured" }),
         {
           status: 500,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         }
       )
     }
-    
-    // Extract Bearer token
-    const bearerToken = authHeader?.startsWith("Bearer ") 
-      ? authHeader.substring(7).trim() 
-      : null
-    
-    // Validate: Authorization header with Bearer token matching Supabase Anon Key
+
+    const authHeader = req.headers.get("Authorization")
+    const bearerToken = authHeader?.startsWith("Bearer ") ? authHeader.substring(7).trim() : null
+
     if (!bearerToken) {
-      console.error("Authorization header with Bearer token is missing")
       return new Response(
-        JSON.stringify({ error: "Unauthorized. Valid Authorization: Bearer header required." }),
+        JSON.stringify({ error: "Unauthorized. Bearer token required." }),
         {
           status: 401,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         }
       )
     }
-    
-    if (bearerToken !== supabaseAnonKey) {
-      console.error("Bearer token does not match SUPABASE_ANON_KEY")
-      console.error("Expected length:", supabaseAnonKey.length)
-      console.error("Received length:", bearerToken.length)
-      console.error("First 20 chars of expected:", supabaseAnonKey.substring(0, 20))
-      console.error("First 20 chars of received:", bearerToken.substring(0, 20))
+
+    if (bearerToken !== expectedToken) {
       return new Response(
-        JSON.stringify({ 
+        JSON.stringify({
           error: "Unauthorized. Invalid authorization token.",
-          hint: "Verify the Supabase Anon Key matches the one in your project settings"
+          hint: "Send header: Authorization: Bearer <key>. Use N8N_SECRET, STORE_INTEGRATION_SECRET, or SUPABASE_ANON_KEY. Ensure the key has no extra spaces, newlines, or a second 'Bearer ' prefix.",
         }),
         {
           status: 401,

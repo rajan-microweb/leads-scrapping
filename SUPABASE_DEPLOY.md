@@ -69,8 +69,8 @@ npx supabase secrets set MY_SECRET=my_value
 npx supabase secrets set SUPABASE_URL=https://YOUR_REF.supabase.co SUPABASE_SERVICE_ROLE_KEY=your_service_role_key SUPABASE_ANON_KEY=your_anon_key
 ```
 
-### Optional: store-integration auth
-`store-integration` accepts (in order): `STORE_INTEGRATION_SECRET`, `N8N_SECRET`, or `SUPABASE_ANON_KEY`.
+### Optional: store-integration and get-all-credentials auth
+Both `store-integration` and `get-all-credentials` accept (in order): `STORE_INTEGRATION_SECRET`, `N8N_SECRET`, or `SUPABASE_ANON_KEY`. Use `Authorization: Bearer <key>`.
 ```bash
 npx supabase secrets set STORE_INTEGRATION_SECRET=your_secret
 # or use N8N_SECRET (e.g. anon key for n8n): already in your project
@@ -160,5 +160,5 @@ For `store-integration` and `get-all-credentials`, the function expects:
    - n8n must send that exact value in `Authorization: Bearer <value>`.
 
 4. **Redeploy after changing secrets**
-   - `npx supabase secrets set STORE_INTEGRATION_SECRET=...`
-   - `npx supabase functions deploy store-integration`
+   - `npx supabase secrets set STORE_INTEGRATION_SECRET=...` or `N8N_SECRET=...`
+   - `npx supabase functions deploy store-integration` and/or `npx supabase functions deploy get-all-credentials`
