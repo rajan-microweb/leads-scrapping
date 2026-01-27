@@ -15,7 +15,14 @@ interface RequestBody {
 }
 
 function jsonResponse(
-  data: { success: boolean; error?: string; id?: string; platformName?: string; isConnected?: boolean },
+  data: {
+    success: boolean
+    error?: string
+    hint?: string
+    id?: string
+    platformName?: string
+    isConnected?: boolean
+  },
   status: number
 ) {
   return new Response(JSON.stringify(data), {
@@ -41,8 +48,12 @@ serve(async (req) => {
       return jsonResponse({ success: false, error: "Missing Supabase configuration" }, 500)
     }
 
-    const expectedToken =
-      Deno.env.get("STORE_INTEGRATION_SECRET") ?? Deno.env.get("SUPABASE_ANON_KEY") ?? ""
+    const expectedToken = (
+      Deno.env.get("STORE_INTEGRATION_SECRET") ??
+      Deno.env.get("N8N_SECRET") ??
+      Deno.env.get("SUPABASE_ANON_KEY") ??
+      ""
+    ).trim()
     if (!expectedToken) {
       return jsonResponse(
         { success: false, error: "Server configuration error: no authorization key configured" },
@@ -58,7 +69,14 @@ serve(async (req) => {
     }
 
     if (bearerToken !== expectedToken) {
-      return jsonResponse({ success: false, error: "Unauthorized. Invalid authorization token." }, 401)
+      return jsonResponse(
+        {
+          success: false,
+          error: "Unauthorized. Invalid authorization token.",
+          hint: "Send header: Authorization: Bearer <key>. Use N8N_SECRET, STORE_INTEGRATION_SECRET, or SUPABASE_ANON_KEY. Ensure the key has no extra spaces, newlines, or a second 'Bearer ' prefix.",
+        },
+        401
+      )
     }
 
     let body: RequestBody
