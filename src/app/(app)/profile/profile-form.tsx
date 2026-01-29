@@ -4,12 +4,14 @@ import { useMemo, useState, useRef } from "react"
 import { useForm } from "react-hook-form"
 import { z } from "zod"
 import { zodResolver } from "@hookform/resolvers/zod"
+import { Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
 import { AvatarCropperModal } from "@/components/avatar-cropper-modal"
+import { PageShell } from "@/components/layout/PageShell"
 
 type CompanyIntelligence = {
   company_name?: string | null
@@ -337,11 +339,17 @@ export function ProfileForm({
   const onSubmitHandler = handleSubmit(onSubmit)
 
   return (
+    <PageShell
+      title="Profile"
+      description="Update your personal and company information."
+      maxWidth="default"
+      className="space-y-8"
+    >
     <form onSubmit={onSubmitHandler} className="space-y-8">
       {/* Section 0: Personal Information */}
       <Card>
         <CardHeader>
-          <CardTitle>Personal Information</CardTitle>
+          <CardTitle className="type-card-title">Personal Information</CardTitle>
           <CardDescription>Update your basic profile details.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -350,7 +358,7 @@ export function ProfileForm({
               <Label htmlFor="fullName">Full Name</Label>
               <Input id="fullName" {...register("fullName")} />
               {errors.fullName && (
-                <p className="text-sm text-red-600">{errors.fullName.message as string}</p>
+                <p className="text-sm text-destructive" role="alert">{errors.fullName.message as string}</p>
               )}
             </div>
             <div className="space-y-2">
@@ -395,7 +403,10 @@ export function ProfileForm({
                   disabled={isUploadingAvatar || isSaving}
                 />
                 {isUploadingAvatar && (
-                  <p className="text-sm text-muted-foreground">Uploading...</p>
+                  <p className="type-body text-muted-foreground flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                    Uploading...
+                  </p>
                 )}
                 <p className="text-xs text-muted-foreground">
                   Upload a profile picture (max 5MB). Supported formats: JPG, PNG, GIF, etc.
@@ -409,7 +420,7 @@ export function ProfileForm({
       {/* Section 1: Website & Company Information */}
       <Card>
         <CardHeader>
-          <CardTitle>Website &amp; Company Information</CardTitle>
+          <CardTitle className="type-card-title">Website &amp; Company Information</CardTitle>
           <CardDescription>
             Fill in the website details below. You can auto-fill company information by clicking the{" "}
             <span className="font-medium">Generate</span> button.
@@ -428,12 +439,19 @@ export function ProfileForm({
                 disabled={isGenerating || isSaving}
                 className="flex-1"
               />
-              <Button type="button" onClick={handleGenerate} disabled={isGenerating || isSaving}>
-                {isGenerating ? "Generating..." : "Generate"}
+              <Button type="button" onClick={handleGenerate} disabled={isGenerating || isSaving} className="gap-2">
+                {isGenerating ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                    Generating...
+                  </>
+                ) : (
+                  "Generate"
+                )}
               </Button>
             </div>
             {errors.websiteUrl && (
-              <p className="text-sm text-red-600">{errors.websiteUrl.message as string}</p>
+              <p className="text-sm text-destructive" role="alert">{errors.websiteUrl.message as string}</p>
             )}
           </div>
 
@@ -540,13 +558,26 @@ export function ProfileForm({
 
       {/* Global messages + save button */}
       <div className="space-y-4">
-        {error && <div className="rounded-md bg-red-50 p-3 text-sm text-red-600">{error}</div>}
+        {error && (
+          <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+            {error}
+          </div>
+        )}
         {success && (
-          <div className="rounded-md bg-green-50 p-3 text-sm text-green-700">{success}</div>
+          <div role="status" className="rounded-md border border-success/30 bg-success/10 p-3 text-sm text-success dark:bg-success/20 dark:text-success">
+            {success}
+          </div>
         )}
         <div className="flex justify-end">
-          <Button type="submit" disabled={isGenerating || isSaving}>
-            {isSaving ? "Saving..." : "Save Profile"}
+          <Button type="submit" disabled={isGenerating || isSaving} className="gap-2">
+            {isSaving ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                Saving...
+              </>
+            ) : (
+              "Save Profile"
+            )}
           </Button>
         </div>
       </div>
@@ -563,10 +594,11 @@ export function ProfileForm({
             }
           }}
           imageSrc={cropperImageSrc}
-          onCropComplete={handleCroppedImage}
+                onCropComplete={handleCroppedImage}
         />
       )}
     </form>
+    </PageShell>
   )
 }
 

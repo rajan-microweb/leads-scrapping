@@ -107,6 +107,7 @@ BEGIN
         'platformName', "platformName",
         'isConnected', "isConnected",
         'credentials', credentials,
+        'metadata', metadata,
         'createdAt', "createdAt",
         'updatedAt', "updatedAt"
       )
@@ -126,6 +127,7 @@ BEGIN
           AND jsonb_typeof(credentials) = 'object'
           AND credentials != '{}'::jsonb
         ),
+        'metadata', metadata,
         'createdAt', "createdAt",
         'updatedAt', "updatedAt"
       )

@@ -1,24 +1,20 @@
 "use client"
 
 import { IntegrationCard } from "@/components/integration-card"
+import { PageShell } from "@/components/layout/PageShell"
 
 export default function IntegrationsPage() {
   return (
-    <div className="mx-auto flex max-w-4xl flex-col gap-6">
-      <div className="space-y-2">
-        <h1 className="text-3xl font-semibold tracking-tight">Integrations</h1>
-        <p className="text-sm text-muted-foreground max-w-2xl">
-          Connect your email and sales tools to keep lead outreach in sync and automate
-          more of your workflow.
-        </p>
-      </div>
-
+    <PageShell
+      title="Integrations"
+      description="Connect your email and sales tools to keep lead outreach in sync and automate more of your workflow."
+      maxWidth="default"
+      className="flex flex-col gap-6"
+    >
       <section aria-label="Available integrations" className="space-y-4">
-        <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
-          Email & Calendar
-        </h2>
+        <h2 className="type-overline">Email & Calendar</h2>
 
-        <div className="grid gap-4">
+        <div className="grid gap-4 max-w-2xl">
           <IntegrationCard
             name="Outlook"
             platformName="outlook"
@@ -26,7 +22,7 @@ export default function IntegrationsPage() {
           />
         </div>
       </section>
-    </div>
+    </PageShell>
   )
 }
 

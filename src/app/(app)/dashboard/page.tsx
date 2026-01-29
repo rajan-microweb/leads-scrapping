@@ -1,5 +1,6 @@
 import { auth } from "@/lib/auth"
 import { redirect } from "next/navigation"
+import { DashboardContent } from "./dashboard-content"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -10,9 +11,10 @@ export default async function DashboardPage() {
   if (!userId) redirect("/auth/signin")
 
   return (
-    <div>
-      <p>Hello</p>
-    </div>
+    <DashboardContent
+      userRole={session.user?.role ?? "CLIENT"}
+      userName={session.user?.name ?? null}
+    />
   )
 }
 

@@ -7,10 +7,8 @@ import {
   Edit,
   Copy,
   Trash2,
-  ArrowUpDown,
   ArrowUp,
   ArrowDown,
-  X,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -42,6 +40,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { PageShell } from "@/components/layout/PageShell"
+import { EmptyState } from "@/components/EmptyState"
+import { ErrorMessage } from "@/components/ErrorMessage"
+import { TableSkeleton } from "@/components/TableSkeleton"
 import { AddSignatureModal } from "./add-signature-modal"
 import type { Signature } from "@/types/signatures"
 
@@ -302,38 +304,39 @@ export function SignaturesList() {
     !allSelected
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div className="space-y-1">
-          <h1 className="text-3xl font-semibold tracking-tight">
-            Email Signatures
-          </h1>
-          <p className="text-sm text-muted-foreground max-w-xl">
-            Create and manage reusable email signatures for your communications.
-          </p>
-        </div>
-
-        <Button onClick={() => {
-          setEditingSignature(null)
-          setIsModalOpen(true)
-        }} className="gap-2">
+    <PageShell
+      title="Email Signatures"
+      description="Create and manage reusable email signatures for your communications."
+      actions={
+        <Button
+          onClick={() => {
+            setEditingSignature(null)
+            setIsModalOpen(true)
+          }}
+          className="gap-2"
+        >
           <Plus className="h-4 w-4" />
           Add Signature
         </Button>
-      </div>
-
+      }
+      maxWidth="default"
+      className="space-y-6"
+    >
       {/* Success Message */}
       {successMessage && (
-        <div className="rounded-md bg-green-50 border border-green-200 p-4 text-sm text-green-800">
+        <div
+          role="status"
+          className="rounded-md border border-success/30 bg-success/10 px-4 py-3 text-sm text-success dark:bg-success/20 dark:text-success"
+        >
           {successMessage}
         </div>
       )}
 
-      <Card className="border border-border/60 shadow-sm">
+      <Card className="border border-border/60 shadow-card">
         <CardHeader>
-          <CardTitle className="flex items-center justify-between">
+          <CardTitle className="type-card-title flex items-center justify-between">
             <span>Your Signatures</span>
-            <span className="text-xs font-normal text-muted-foreground">
+            <span className="type-caption font-normal">
               {signatures.length} {signatures.length === 1 ? "signature" : "signatures"}
             </span>
           </CardTitle>
@@ -354,7 +357,7 @@ export function SignaturesList() {
 
             <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
               <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">Sort by:</span>
+                <span className="type-body text-muted-foreground">Sort by:</span>
                 <Select
                   value={sortBy}
                   onValueChange={(value) => setSortBy(value as SortBy)}
@@ -393,8 +396,8 @@ export function SignaturesList() {
 
           {/* Bulk Actions Bar */}
           {selectedSignatures.size > 0 && (
-            <div className="mb-4 p-3 bg-muted rounded-md flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">
+            <div className="mb-4 p-3 bg-muted rounded-md flex items-center justify-between transition-colors duration-normal">
+              <span className="type-body text-muted-foreground">
                 {selectedSignatures.size} signature{selectedSignatures.size > 1 ? "s" : ""} selected
               </span>
               <div className="flex items-center gap-2">
@@ -419,39 +422,33 @@ export function SignaturesList() {
           )}
 
           {isLoading ? (
-            <div className="flex h-32 flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
-              <span className="h-4 w-4 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
-              <span>Loading signatures...</span>
-            </div>
+            <TableSkeleton rows={5} columns={5} />
           ) : error ? (
-            <div className="flex flex-col h-32 items-center justify-center gap-3 text-sm text-red-600">
-              <p>{error}</p>
-              <Button variant="outline" size="sm" onClick={loadSignatures}>
-                Retry
-              </Button>
-            </div>
+            <ErrorMessage message={error} onRetry={loadSignatures} />
           ) : filteredAndSortedSignatures.length === 0 ? (
-            <div className="flex h-40 flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
-                {searchQuery ? (
-                  <Search className="h-6 w-6 text-muted-foreground" />
-                ) : (
-                  <Plus className="h-6 w-6 text-muted-foreground" />
-                )}
-              </div>
-              <div className="text-center space-y-1">
-                <p className="font-medium text-foreground">
-                  {searchQuery
-                    ? "No signatures found"
-                    : "No signatures yet"}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {searchQuery
-                    ? "Try adjusting your search query."
-                    : 'Get started by creating your first email signature using the "Add Signature" button above.'}
-                </p>
-              </div>
-            </div>
+            <EmptyState
+              icon={searchQuery ? Search : Plus}
+              title={searchQuery ? "No signatures found" : "No signatures yet"}
+              description={
+                searchQuery
+                  ? "Try adjusting your search query."
+                  : 'Get started by creating your first email signature using the "Add Signature" button above.'
+              }
+              action={
+                !searchQuery && (
+                  <Button
+                    onClick={() => {
+                      setEditingSignature(null)
+                      setIsModalOpen(true)
+                    }}
+                    className="gap-2"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add Signature
+                  </Button>
+                )
+              }
+            />
           ) : (
             <Table>
               <TableHeader>
@@ -528,7 +525,7 @@ export function SignaturesList() {
                   </TableRow>
                 ))}
               </TableBody>
-              <TableCaption className="text-xs text-muted-foreground">
+              <TableCaption className="type-caption">
                 Showing {filteredAndSortedSignatures.length} of {signatures.length}{" "}
                 {signatures.length === 1 ? "signature" : "signatures"}
                 {searchQuery && ` matching "${searchQuery}"`}
@@ -601,6 +598,6 @@ export function SignaturesList() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </PageShell>
   )
 }

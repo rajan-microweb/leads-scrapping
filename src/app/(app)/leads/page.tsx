@@ -1,8 +1,8 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { useRouter } from "next/navigation"
-import { Clock, FileSpreadsheet, UploadCloud, Plus } from "lucide-react"
+import { Clock, FileSpreadsheet, UploadCloud, Plus, Loader2 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -11,7 +11,6 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
   DialogFooter,
 } from "@/components/ui/dialog"
 import {
@@ -25,6 +24,10 @@ import {
 } from "@/components/ui/table"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { PageShell } from "@/components/layout/PageShell"
+import { EmptyState } from "@/components/EmptyState"
+import { ErrorMessage } from "@/components/ErrorMessage"
+import { TableSkeleton } from "@/components/TableSkeleton"
 
 type LeadFile = {
   id: string
@@ -66,51 +69,33 @@ export default function LeadsPage() {
 
   const pageSize = 10
 
-  useEffect(() => {
-    let isMounted = true
-
-    const loadLeads = async () => {
-      try {
-        setIsLoading(true)
-        setError(null)
-
-        const res = await fetch("/api/leads")
-
-        if (!res.ok) {
-          throw new Error("Failed to load leads")
-        }
-
-        const data = (await res.json()) as LeadFile[]
-
-        if (isMounted) {
-          setLeadFiles(
-            data.map((item) => ({
-              ...item,
-              uploadedAt: item.uploadedAt,
-            })),
-          )
-        }
-      } catch (err) {
-        if (isMounted) {
-          setError(
-            err instanceof Error
-              ? err.message
-              : "An unexpected error occurred while loading leads.",
-          )
-        }
-      } finally {
-        if (isMounted) {
-          setIsLoading(false)
-        }
-      }
-    }
-
-    loadLeads()
-
-    return () => {
-      isMounted = false
+  const loadLeads = useCallback(async () => {
+    try {
+      setIsLoading(true)
+      setError(null)
+      const res = await fetch("/api/leads")
+      if (!res.ok) throw new Error("Failed to load leads")
+      const data = (await res.json()) as LeadFile[]
+      setLeadFiles(
+        data.map((item) => ({
+          ...item,
+          uploadedAt: item.uploadedAt,
+        })),
+      )
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "An unexpected error occurred while loading leads.",
+      )
+    } finally {
+      setIsLoading(false)
     }
   }, [])
+
+  useEffect(() => {
+    loadLeads()
+  }, [loadLeads])
 
   const loadSignatures = async (): Promise<Signature[]> => {
     try {
@@ -258,25 +243,22 @@ export default function LeadsPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div className="space-y-1">
-          <h1 className="text-3xl font-semibold tracking-tight">Leads</h1>
-          <p className="text-sm text-muted-foreground max-w-xl">
-            Upload prospect lists in CSV or Excel format and keep track of every file
-            you&apos;ve processed through your workflow.
-          </p>
-        </div>
-
-        <Button 
-          className="gap-2" 
+    <PageShell
+      title="Leads"
+      description="Upload prospect lists in CSV or Excel format and keep track of every file you've processed through your workflow."
+      actions={
+        <Button
+          className="gap-2"
           onClick={handleCreateLeadsClick}
           disabled={isCheckingOutlook}
         >
           <Plus className="h-4 w-4" />
           Create Leads
         </Button>
-      </div>
+      }
+      maxWidth="default"
+      className="space-y-6"
+    >
 
       {/* Connect Account Modal */}
       <Dialog open={connectAccountDialogOpen} onOpenChange={setConnectAccountDialogOpen}>
@@ -352,155 +334,19 @@ export default function LeadsPage() {
                   formData.append("file", selectedFile)
 
                   let userId = ""
-                  let userProfile: {
-                    id?: string
-                    name?: string | null
-                    fullName?: string | null
-                    email?: string | null
-                    phone?: string | null
-                    jobTitle?: string | null
-                    country?: string | null
-                    timezone?: string | null
-                    image?: string | null
-                    avatarUrl?: string | null
-                    createdAt?: string | null
-                    updatedAt?: string | null
-                  } | null = null
                   try {
                     const profileRes = await fetch("/api/profile")
                     if (profileRes.ok) {
                       const data = await profileRes.json()
                       if (data && !data.error && data.id) {
                         userId = data.id
-                        userProfile = data
                       }
                     }
                   } catch {
                     /* continue without userId */
                   }
 
-                  let companyInfo: {
-                    id?: string
-                    websiteName?: string | null
-                    websiteUrl?: string | null
-                    companyName?: string | null
-                    companyType?: string | null
-                    industryExpertise?: string | string[] | null
-                    fullTechSummary?: string | string[] | null
-                    serviceCatalog?: string[] | null
-                    theHook?: string | null
-                    whatTheyDo?: string | null
-                    valueProposition?: string | null
-                    brandTone?: string[] | null
-                    createdAt?: string | null
-                    updatedAt?: string | null
-                  } | null = null
-                  try {
-                    const companyRes = await fetch("/api/my-company-info")
-                    if (companyRes.ok) {
-                      const data = await companyRes.json()
-                      if (data && !data.error && data.id) {
-                        companyInfo = data
-                      }
-                    }
-                  } catch {
-                    /* continue without company info */
-                  }
-
-                  type IntegrationItem = {
-                    id?: string
-                    platformName?: string | null
-                    isConnected?: boolean | null
-                    createdAt?: string | null
-                    updatedAt?: string | null
-                    credentials?: {
-                      clientId?: string | null
-                      clientSecret?: string | null
-                      tenantId?: string | null
-                      encrypted?: unknown
-                      [k: string]: unknown
-                    } | null
-                  }
-                  let integrationsList: IntegrationItem[] = []
-                  try {
-                    const intRes = await fetch("/api/integrations")
-                    if (intRes.ok) {
-                      const data = await intRes.json()
-                      if (Array.isArray(data)) {
-                        integrationsList = data
-                      }
-                    }
-                  } catch {
-                    /* continue without integrations */
-                  }
-
                   formData.append("userId", userId)
-
-                  // Personal details – each field separately in webhook body
-                  if (userProfile) {
-                    if (userProfile.id != null) formData.append("personalId", String(userProfile.id))
-                    if (userProfile.name != null && userProfile.name !== "") formData.append("personalName", userProfile.name)
-                    if (userProfile.fullName != null && userProfile.fullName !== "") formData.append("personalFullName", userProfile.fullName)
-                    if (userProfile.email != null && userProfile.email !== "") formData.append("personalEmail", userProfile.email)
-                    if (userProfile.phone != null && userProfile.phone !== "") formData.append("personalPhone", userProfile.phone)
-                    if (userProfile.jobTitle != null && userProfile.jobTitle !== "") formData.append("personalJobTitle", userProfile.jobTitle)
-                    if (userProfile.country != null && userProfile.country !== "") formData.append("personalCountry", userProfile.country)
-                    if (userProfile.timezone != null && userProfile.timezone !== "") formData.append("personalTimezone", userProfile.timezone)
-                    if (userProfile.image != null && userProfile.image !== "") formData.append("personalImage", userProfile.image)
-                    if (userProfile.avatarUrl != null && userProfile.avatarUrl !== "") formData.append("personalAvatarUrl", userProfile.avatarUrl)
-                    if (userProfile.createdAt != null) formData.append("personalCreatedAt", userProfile.createdAt)
-                    if (userProfile.updatedAt != null) formData.append("personalUpdatedAt", userProfile.updatedAt)
-                  }
-
-                  // Company details – each field separately in webhook body
-                  if (companyInfo) {
-                    if (companyInfo.id != null) formData.append("companyId", companyInfo.id)
-                    if (companyInfo.websiteName != null && companyInfo.websiteName !== "") formData.append("companyWebsiteName", companyInfo.websiteName)
-                    if (companyInfo.websiteUrl != null && companyInfo.websiteUrl !== "") formData.append("companyWebsiteUrl", companyInfo.websiteUrl)
-                    if (companyInfo.companyName != null && companyInfo.companyName !== "") formData.append("companyName", companyInfo.companyName)
-                    if (companyInfo.companyType != null && companyInfo.companyType !== "") formData.append("companyType", companyInfo.companyType)
-                    if (companyInfo.theHook != null && companyInfo.theHook !== "") formData.append("companyTheHook", companyInfo.theHook)
-                    if (companyInfo.whatTheyDo != null && companyInfo.whatTheyDo !== "") formData.append("companyWhatTheyDo", companyInfo.whatTheyDo)
-                    if (companyInfo.valueProposition != null && companyInfo.valueProposition !== "") formData.append("companyValueProposition", companyInfo.valueProposition)
-                    if (companyInfo.industryExpertise != null) {
-                      const v = companyInfo.industryExpertise
-                      formData.append("companyIndustryExpertise", typeof v === "string" ? v : JSON.stringify(v))
-                    }
-                    if (companyInfo.fullTechSummary != null) {
-                      const v = companyInfo.fullTechSummary
-                      formData.append("companyFullTechSummary", typeof v === "string" ? v : JSON.stringify(v))
-                    }
-                    if (companyInfo.serviceCatalog != null && companyInfo.serviceCatalog.length > 0) {
-                      formData.append("companyServiceCatalog", JSON.stringify(companyInfo.serviceCatalog))
-                    }
-                    if (companyInfo.brandTone != null && companyInfo.brandTone.length > 0) {
-                      formData.append("companyBrandTone", JSON.stringify(companyInfo.brandTone))
-                    }
-                    if (companyInfo.createdAt != null) formData.append("companyCreatedAt", companyInfo.createdAt)
-                    if (companyInfo.updatedAt != null) formData.append("companyUpdatedAt", companyInfo.updatedAt)
-                  }
-
-                  // Integration details including credentials – each field separately in webhook body
-                  formData.append("integrationCount", String(integrationsList.length))
-                  integrationsList.forEach((int, idx) => {
-                    const p = `integration${idx}_`
-                    if (int.id != null) formData.append(`${p}id`, int.id)
-                    if (int.platformName != null && int.platformName !== "") formData.append(`${p}platformName`, int.platformName)
-                    if (int.isConnected != null) formData.append(`${p}isConnected`, String(int.isConnected))
-                    if (int.createdAt != null) formData.append(`${p}createdAt`, int.createdAt)
-                    if (int.updatedAt != null) formData.append(`${p}updatedAt`, int.updatedAt)
-                    const cred = int.credentials
-                    if (cred && typeof cred === "object") {
-                      const c = cred as Record<string, unknown>
-                      const clientId = c.clientId ?? c.client_id
-                      const clientSecret = c.clientSecret ?? c.client_secret
-                      const tenantId = c.tenantId ?? c.tenant_id
-                      if (clientId != null && String(clientId) !== "") formData.append(`${p}credentialsClientId`, String(clientId))
-                      if (clientSecret != null && String(clientSecret) !== "") formData.append(`${p}credentialsClientSecret`, String(clientSecret))
-                      if (tenantId != null && String(tenantId) !== "") formData.append(`${p}credentialsTenantId`, String(tenantId))
-                      if (c.encrypted != null) formData.append(`${p}credentialsEncrypted`, typeof c.encrypted === "string" ? c.encrypted : JSON.stringify(c.encrypted))
-                    }
-                  })
 
                   let selectedSignature: Signature | null = null
                   if (selectedSignatureId) {
@@ -647,16 +493,23 @@ export default function LeadsPage() {
               </div>
 
               {uploadError && (
-                <p className="text-sm text-red-600">{uploadError}</p>
+                <p className="text-sm text-destructive" role="alert">{uploadError}</p>
               )}
 
               {uploadSuccess && (
-                <p className="text-sm text-green-600">{uploadSuccess}</p>
+                <p className="text-sm text-success" role="status">{uploadSuccess}</p>
               )}
 
               <div className="flex justify-end gap-2 pt-2">
-                <Button type="submit" disabled={uploading}>
-                  {uploading ? "Uploading..." : "Upload"}
+                <Button type="submit" disabled={uploading} className="gap-2">
+                  {uploading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                      Uploading...
+                    </>
+                  ) : (
+                    "Upload"
+                  )}
                 </Button>
               </div>
             </form>
@@ -666,14 +519,12 @@ export default function LeadsPage() {
       <div className="grid gap-3 sm:grid-cols-3">
         <Card className="border-dashed">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <span className="text-xs font-medium text-muted-foreground">
-              Total files
-            </span>
+            <span className="type-caption font-medium">Total files</span>
             <FileSpreadsheet className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-semibold">{leadFiles.length}</div>
-            <p className="text-xs text-muted-foreground">
+            <p className="type-caption mt-1">
               {leadFiles.length === 1 ? "Single upload so far" : "All uploaded lead files"}
             </p>
           </CardContent>
@@ -681,9 +532,7 @@ export default function LeadsPage() {
 
         <Card className="border-dashed">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <span className="text-xs font-medium text-muted-foreground">
-              Last upload
-            </span>
+            <span className="type-caption font-medium">Last upload</span>
             <Clock className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -692,63 +541,49 @@ export default function LeadsPage() {
                 ? "No uploads yet"
                 : new Date(leadFiles[0].uploadedAt).toLocaleString()}
             </div>
-            <p className="text-xs text-muted-foreground">
-              Most recent file you&apos;ve added
-            </p>
+            <p className="type-caption mt-1">Most recent file you&apos;ve added</p>
           </CardContent>
         </Card>
 
         <Card className="border-dashed">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <span className="text-xs font-medium text-muted-foreground">
-              Table view
-            </span>
+            <span className="type-caption font-medium">Table view</span>
           </CardHeader>
           <CardContent>
             <div className="text-sm font-medium">
               Page {currentPage} of {totalPages}
             </div>
-            <p className="text-xs text-muted-foreground">
-              Showing up to {pageSize} files per page
-            </p>
+            <p className="type-caption mt-1">Showing up to {pageSize} files per page</p>
           </CardContent>
         </Card>
       </div>
 
-      <Card className="border border-border/60 shadow-sm">
+      <Card className="border border-border/60 shadow-card">
         <CardHeader>
-          <CardTitle className="flex items-center justify-between">
+          <CardTitle className="flex items-center justify-between type-card-title">
             <span>Lead files</span>
-            <span className="text-xs font-normal text-muted-foreground">
+            <span className="type-caption font-normal">
               Keep your uploads organized and easy to scan.
             </span>
           </CardTitle>
         </CardHeader>
         <CardContent>
           {isLoading ? (
-            <div className="flex h-32 flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
-              <span className="h-4 w-4 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
-              <span>Loading lead files...</span>
-            </div>
+            <TableSkeleton rows={5} columns={4} />
           ) : error ? (
-            <div className="flex h-24 items-center justify-center text-sm text-red-600">
-              {error}
-            </div>
+            <ErrorMessage message={error} onRetry={loadLeads} />
           ) : leadFiles.length === 0 ? (
-            <div className="flex h-40 flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
-                <UploadCloud className="h-6 w-6 text-muted-foreground" />
-              </div>
-              <div className="text-center space-y-1">
-                <p className="font-medium text-foreground">
-                  No lead files uploaded yet
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Start by uploading a CSV or Excel file using the &quot;Create
-                  Leads&quot; button above.
-                </p>
-              </div>
-            </div>
+            <EmptyState
+              icon={UploadCloud}
+              title="No lead files uploaded yet"
+              description='Start by uploading a CSV or Excel file using the "Create Leads" button above.'
+              action={
+                <Button onClick={handleCreateLeadsClick} disabled={isCheckingOutlook} className="gap-2">
+                  <Plus className="h-4 w-4" />
+                  Create Leads
+                </Button>
+              }
+            />
           ) : (
             <Table>
               <TableHeader>
@@ -816,7 +651,7 @@ export default function LeadsPage() {
           )}
         </CardContent>
       </Card>
-    </div>
+    </PageShell>
   )
 }
 

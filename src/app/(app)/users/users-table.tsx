@@ -1,10 +1,14 @@
 "use client"
 
 import { useState } from "react"
+import { Users, Loader2 } from "lucide-react"
 
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableCaption } from "@/components/ui/table"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { PageShell } from "@/components/layout/PageShell"
+import { EmptyState } from "@/components/EmptyState"
+import { ErrorMessage } from "@/components/ErrorMessage"
 
 type Role = "ADMIN" | "CLIENT"
 
@@ -72,57 +76,34 @@ export function UsersTable({ currentUserId, initialUsers }: UsersTableProps) {
   }
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto">
-      <div className="flex flex-col gap-2">
-        <div className="space-y-2">
-          <h1 className="text-3xl font-bold tracking-tight">User Management</h1>
-          <p className="text-sm text-muted-foreground max-w-2xl">
-            Manage user access and permissions. Only administrators can view this page and modify user roles.
-          </p>
-        </div>
-      </div>
-
-      <Card className="border border-border/60 shadow-sm">
+    <PageShell
+      title="User Management"
+      description="Manage user access and permissions. Only administrators can view this page and modify user roles."
+      maxWidth="lg"
+      className="space-y-6"
+    >
+      <Card className="border border-border/60 shadow-card">
         <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle className="text-lg">All Users</CardTitle>
-            <span className="text-xs font-normal text-muted-foreground">
+            <CardTitle className="type-card-title">All Users</CardTitle>
+            <span className="type-caption font-normal">
               {users.length} {users.length === 1 ? "user" : "users"} registered
             </span>
           </div>
         </CardHeader>
         <CardContent>
           {error && (
-            <div className="mb-3 text-sm text-red-600" role="alert">
-              {error}
+            <div className="mb-4">
+              <ErrorMessage message={error} />
             </div>
           )}
 
           {users.length === 0 ? (
-            <div className="flex h-40 flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="h-6 w-6"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"
-                  />
-                </svg>
-              </div>
-              <div className="text-center space-y-1">
-                <p className="font-medium text-foreground">No users found</p>
-                <p className="text-xs text-muted-foreground">
-                  No user accounts have been created yet.
-                </p>
-              </div>
-            </div>
+            <EmptyState
+              icon={Users}
+              title="No users found"
+              description="No user accounts have been created yet."
+            />
           ) : (
             <Table>
               <TableHeader>
@@ -164,7 +145,7 @@ export function UsersTable({ currentUserId, initialUsers }: UsersTableProps) {
                             </span>
                             {!isCurrentUser && (
                               <select
-                                className="h-8 rounded-md border border-input bg-background px-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                className="h-8 rounded-md border border-input bg-background px-2.5 text-xs transition-[box-shadow,border-color] duration-fast focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                                 value={user.role}
                                 onChange={(e) =>
                                   handleChangeRole(user.id, e.target.value as Role)
@@ -178,12 +159,13 @@ export function UsersTable({ currentUserId, initialUsers }: UsersTableProps) {
                             )}
                           </div>
                           {isCurrentUser && (
-                            <p className="text-xs text-muted-foreground italic">
+                            <p className="type-caption italic">
                               You cannot change your own role
                             </p>
                           )}
                           {isSavingId === user.id && (
-                            <p className="text-xs text-muted-foreground">
+                            <p className="type-caption flex items-center gap-1.5">
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
                               Updating...
                             </p>
                           )}
@@ -220,7 +202,7 @@ export function UsersTable({ currentUserId, initialUsers }: UsersTableProps) {
           )}
         </CardContent>
       </Card>
-    </div>
+    </PageShell>
   )
 }
 

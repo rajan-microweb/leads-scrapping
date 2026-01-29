@@ -97,6 +97,8 @@ Authorization: Bearer <N8N_SECRET or STORE_INTEGRATION_SECRET or SUPABASE_ANON_K
         "platformName": "...",
         "isConnected": true,
         "hasCredentials": true,  // Only if includeSecrets is false
+        "credentials": {...},    // Only if includeSecrets is true
+        "metadata": { "email": "...", "displayName": "..." },  // or null if not set
         "createdAt": "...",
         "updatedAt": "..."
       }

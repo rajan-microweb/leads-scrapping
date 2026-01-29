@@ -38,12 +38,45 @@ export function IntegrationCard({ name, platformName, description, Icon, onConne
   const [isConnected, setIsConnected] = useState(false)
   const [integrationId, setIntegrationId] = useState<string | null>(null)
   const [isLoadingStatus, setIsLoadingStatus] = useState(true)
-  const [isRedirecting, setIsRedirecting] = useState(false)
   const [redirectError, setRedirectError] = useState<string | null>(null)
   const [metadata, setMetadata] = useState<Record<string, unknown> | null>(null)
   const [successDialogOpen, setSuccessDialogOpen] = useState(false)
   const [isPendingConnection, setIsPendingConnection] = useState(false)
+  const [oauthUrl, setOauthUrl] = useState<string | null>(null)
+  const [oauthUrlError, setOauthUrlError] = useState<string | null>(null)
   const outlookPopupRef = useRef<Window | null>(null)
+  const onConnectionChangeRef = useRef(onConnectionChange)
+  onConnectionChangeRef.current = onConnectionChange
+
+  // Pre-fetch Outlook OAuth URL so Connect can call window.open(url) with no await
+  // before it, which avoids popup blockers and avoids setting popup.location to a
+  // cross-origin URL (which some browsers block). Refetch when user disconnects.
+  useEffect(() => {
+    if (platformName !== "outlook" || isConnected) return
+    if (oauthUrl || oauthUrlError) return
+    let cancelled = false
+    fetch("/api/integrations/outlook-oauth-url")
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error("Not ok"))))
+      .then((data) => {
+        if (cancelled) return
+        if (data?.url && typeof data.url === "string") {
+          setOauthUrl(data.url)
+          setOauthUrlError(null)
+        } else {
+          setOauthUrl(null)
+          setOauthUrlError("Could not load sign-in link.")
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setOauthUrl(null)
+          setOauthUrlError("Could not load sign-in link.")
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [platformName, isConnected, oauthUrl, oauthUrlError])
 
   // Fetch integration status from DB on mount. /api/integrations returns only the current
   // user's integrations (filtered by userId). No row for this platform → Connect; row
@@ -83,13 +116,38 @@ export function IntegrationCard({ name, platformName, description, Icon, onConne
   useEffect(() => {
     if (!isPendingConnection || platformName !== "outlook") return
 
-    const POLL_MS = 2500
+    const POLL_MS = 1500
     const TIMEOUT_MS = 10 * 60 * 1000
     const startedAt = Date.now()
 
     const id = setInterval(async () => {
       if (outlookPopupRef.current?.closed) {
         clearInterval(id)
+        // Popup closed (e.g. auto-closed by n8n): do one final fetch and update UI if
+        // the integration was stored in the DB, so the user doesn’t need to refresh
+        try {
+          const res = await fetch("/api/integrations")
+          if (res.ok) {
+            const raw = await res.json()
+            const list = Array.isArray(raw) ? raw : []
+            const found = list.find(
+              (int: { platformName: string; isConnected: boolean; id?: string; metadata?: Record<string, unknown> | null }) =>
+                int.platformName === "outlook" && int.isConnected
+            )
+            if (found) {
+              setIsConnected(true)
+              setIntegrationId(found.id)
+              setMetadata(found.metadata ?? null)
+              setOauthUrl(null)
+              setOauthUrlError(null)
+              setRedirectError(null)
+              setSuccessDialogOpen(true)
+              onConnectionChangeRef.current?.()
+            }
+          }
+        } catch {
+          /* ignore */
+        }
         setIsPendingConnection(false)
         return
       }
@@ -112,17 +170,77 @@ export function IntegrationCard({ name, platformName, description, Icon, onConne
           setIsConnected(true)
           setIntegrationId(found.id)
           setMetadata(found.metadata ?? null)
+          setOauthUrl(null)
+          setOauthUrlError(null)
+          setRedirectError(null)
           setIsPendingConnection(false)
           setSuccessDialogOpen(true)
-          onConnectionChange?.()
+          onConnectionChangeRef.current?.()
         }
       } catch {
         // ignore, will retry next tick
       }
     }, POLL_MS)
 
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch("/api/integrations")
+        if (!res.ok) return
+        const raw = await res.json()
+        const list = Array.isArray(raw) ? raw : []
+        const found = list.find(
+          (int: { platformName: string; isConnected: boolean; id?: string; metadata?: Record<string, unknown> | null }) =>
+            int.platformName === "outlook" && int.isConnected
+        )
+        if (found) {
+          clearInterval(id)
+          setIsConnected(true)
+          setIntegrationId(found.id ?? null)
+          setMetadata(found.metadata ?? null)
+          setOauthUrl(null)
+          setOauthUrlError(null)
+          setRedirectError(null)
+          setIsPendingConnection(false)
+          setSuccessDialogOpen(true)
+          onConnectionChangeRef.current?.()
+        }
+      } catch { /* ignore */ }
+    }, 800)
+    return () => { clearInterval(id); clearTimeout(t) }
+  }, [isPendingConnection, platformName])
+
+  // When Outlook is not connected and we're not in the OAuth flow, still check the DB
+  // periodically (e.g. user completed OAuth in another tab, or fallback link was used
+  // in a way that didn't set isPendingConnection). Ensures the UI updates without refresh.
+  useEffect(() => {
+    if (platformName !== "outlook" || isConnected || isLoadingStatus || isPendingConnection) return
+
+    const SYNC_MS = 10_000
+    const id = setInterval(async () => {
+      try {
+        const res = await fetch("/api/integrations")
+        if (!res.ok) return
+        const raw = await res.json()
+        const list = Array.isArray(raw) ? raw : []
+        const found = list.find(
+          (int: { platformName: string; isConnected: boolean; id?: string; metadata?: Record<string, unknown> | null }) =>
+            int.platformName === "outlook" && int.isConnected
+        )
+        if (found) {
+          clearInterval(id)
+          setIsConnected(true)
+          setIntegrationId(found.id ?? null)
+          setMetadata(found.metadata ?? null)
+          setOauthUrl(null)
+          setOauthUrlError(null)
+          setRedirectError(null)
+          onConnectionChangeRef.current?.()
+        }
+      } catch { /* ignore */ }
+    }, SYNC_MS)
+
     return () => clearInterval(id)
-  }, [isPendingConnection, platformName, onConnectionChange])
+  }, [platformName, isConnected, isLoadingStatus, isPendingConnection])
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault()
@@ -169,7 +287,10 @@ export function IntegrationCard({ name, platformName, description, Icon, onConne
         throw new Error(data.error || "Failed to connect integration")
       }
 
-      // Re-fetch from DB (user-scoped by /api/integrations) to confirm persisted state and get metadata
+      // Re-fetch from DB (user-scoped by /api/integrations) to confirm persisted state and get metadata.
+      // Only update UI and show success when we have a DB-confirmed row; no optimistic updates.
+      const verificationError =
+        "Connection was reported successful but we could not verify it. Please refresh the page to confirm."
       try {
         const refetchRes = await fetch("/api/integrations")
         if (refetchRes.ok) {
@@ -183,28 +304,21 @@ export function IntegrationCard({ name, platformName, description, Icon, onConne
             setIsConnected(true)
             setIntegrationId(found.id ?? data.id)
             setMetadata(found.metadata ?? null)
+            setClientId("")
+            setClientSecret("")
+            setTenantId("")
+            setOpen(false)
+            setSuccessDialogOpen(true)
+            onConnectionChange?.()
           } else {
-            setIsConnected(true)
-            setIntegrationId(data.id)
-            setMetadata(null)
+            setErrors({ submit: verificationError })
           }
         } else {
-          setIsConnected(true)
-          setIntegrationId(data.id)
-          setMetadata(null)
+          setErrors({ submit: verificationError })
         }
       } catch {
-        setIsConnected(true)
-        setIntegrationId(data.id)
-        setMetadata(null)
+        setErrors({ submit: verificationError })
       }
-
-      setClientId("")
-      setClientSecret("")
-      setTenantId("")
-      setOpen(false)
-      setSuccessDialogOpen(true)
-      onConnectionChange?.()
     } catch (err) {
       setErrors({
         submit: err instanceof Error ? err.message : "An unexpected error occurred",
@@ -250,42 +364,31 @@ export function IntegrationCard({ name, platformName, description, Icon, onConne
     }
   }
 
-  const handleOutlookConnect = async () => {
+  const handleOutlookConnect = () => {
     if (platformName !== "outlook") return
-    setIsRedirecting(true)
     setRedirectError(null)
     outlookPopupRef.current = null
-    try {
-      const res = await fetch("/api/integrations/outlook-oauth-url")
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error(data.error || "Failed to get authorization URL")
-      }
-      const data = await res.json()
-      const url = data?.url
-      if (typeof url !== "string" || !url) {
-        throw new Error("Invalid response")
-      }
-      const popup = window.open(url, "_blank", "noopener,noreferrer,width=600,height=700")
-      if (popup == null) {
-        setRedirectError("Popup was blocked. Please allow popups and try again.")
-        return
-      }
-      outlookPopupRef.current = popup
-      setIsRedirecting(false)
-      setIsPendingConnection(true)
-    } catch (err) {
-      setRedirectError(err instanceof Error ? err.message : "Something went wrong")
-    } finally {
-      setIsRedirecting(false)
+
+    if (!oauthUrl) {
+      setRedirectError(oauthUrlError || "Sign-in link is still loading. Please wait a moment and try again.")
+      return
     }
+
+    const popup = window.open(oauthUrl, "_blank", "noopener,noreferrer,width=600,height=700")
+    if (popup == null) {
+      setRedirectError("Popup was blocked. Please allow popups and try again.")
+      return
+    }
+    outlookPopupRef.current = popup
+    setIsPendingConnection(true)
+
   }
 
   return (
     <>
     <div className="space-y-3">
       <Dialog open={open} onOpenChange={setOpen}>
-        <Card className="flex items-center justify-between gap-4 border-border/70 bg-background">
+        <Card className="flex items-center justify-between gap-4 border-border/70 transition-shadow duration-normal hover:shadow-dropdown">
           <CardContent className="flex w-full items-center justify-between gap-4 py-4">
             <div className="flex items-center gap-4">
               <div className="flex h-10 w-10 items-center justify-center rounded-md bg-white border border-border overflow-hidden p-1.5">
@@ -322,7 +425,8 @@ export function IntegrationCard({ name, platformName, description, Icon, onConne
             </div>
 
           {isLoadingStatus ? (
-            <Button size="sm" disabled>
+            <Button size="sm" disabled className="gap-2">
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" aria-hidden />
               Loading...
             </Button>
           ) : isConnected ? (
@@ -343,7 +447,7 @@ export function IntegrationCard({ name, platformName, description, Icon, onConne
                 </DialogHeader>
 
                 {errors.submit && (
-                  <p className="text-xs text-red-600">{errors.submit}</p>
+                  <p className="text-xs text-destructive">{errors.submit}</p>
                 )}
 
                 <DialogFooter className="pt-2">
@@ -369,12 +473,37 @@ export function IntegrationCard({ name, platformName, description, Icon, onConne
               <Button
                 size="sm"
                 onClick={handleOutlookConnect}
-                disabled={isRedirecting || isPendingConnection}
+                disabled={isPendingConnection || (oauthUrl === null && oauthUrlError === null)}
+                className="gap-2"
               >
-                {isRedirecting ? "Opening..." : isPendingConnection ? "Connecting..." : "Connect"}
+                {(isPendingConnection || (oauthUrl === null && oauthUrlError === null)) ? (
+                  <>
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" aria-hidden />
+                    {isPendingConnection ? "Connecting..." : "Loading..."}
+                  </>
+                ) : (
+                  "Connect"
+                )}
               </Button>
-              {redirectError && (
-                <p className="text-xs text-red-600">{redirectError}</p>
+              {(redirectError || oauthUrlError) && (
+                <div className="flex flex-col items-end gap-1">
+                  <p className="text-xs text-destructive" role="alert">{redirectError || oauthUrlError}</p>
+                  {redirectError === "Popup was blocked. Please allow popups and try again." &&
+                    oauthUrl && (
+                      <a
+                        href={oauthUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={() => {
+                          setRedirectError(null)
+                          setIsPendingConnection(true)
+                        }}
+                        className="text-xs text-primary underline hover:no-underline"
+                      >
+                        Or open sign-in in a new tab
+                      </a>
+                    )}
+                </div>
               )}
             </div>
           ) : (
@@ -407,7 +536,7 @@ export function IntegrationCard({ name, platformName, description, Icon, onConne
               disabled={isSubmitting}
             />
             {errors.clientId && (
-              <p className="text-xs text-red-600">{errors.clientId}</p>
+              <p className="text-xs text-destructive">{errors.clientId}</p>
             )}
           </div>
 
@@ -422,7 +551,7 @@ export function IntegrationCard({ name, platformName, description, Icon, onConne
               disabled={isSubmitting}
             />
             {errors.clientSecret && (
-              <p className="text-xs text-red-600">{errors.clientSecret}</p>
+              <p className="text-xs text-destructive">{errors.clientSecret}</p>
             )}
           </div>
 
@@ -437,12 +566,12 @@ export function IntegrationCard({ name, platformName, description, Icon, onConne
               disabled={isSubmitting}
             />
             {errors.tenantId && (
-              <p className="text-xs text-red-600">{errors.tenantId}</p>
+              <p className="text-xs text-destructive">{errors.tenantId}</p>
             )}
           </div>
 
           {errors.submit && (
-            <p className="text-xs text-red-600">{errors.submit}</p>
+            <p className="text-xs text-destructive">{errors.submit}</p>
           )}
 
           <DialogFooter className="pt-2">
@@ -456,9 +585,9 @@ export function IntegrationCard({ name, platformName, description, Icon, onConne
       </Dialog>
 
       {isConnected && (
-        <Card className="border-border/70 bg-background">
+        <Card className="border-border/70">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">{name} profile</CardTitle>
+            <CardTitle className="type-card-title">{name} profile</CardTitle>
           </CardHeader>
           <CardContent className="pt-0">
             <IntegrationDetails

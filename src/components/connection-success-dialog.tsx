@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { CheckCircle2 } from "lucide-react"
 
 import {
   Dialog,
@@ -48,14 +49,21 @@ export function ConnectionSuccessDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Connected</DialogTitle>
-          <DialogDescription>
-            {platformDisplayName} has been connected successfully.
-          </DialogDescription>
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-success/10">
+              <CheckCircle2 className="h-6 w-6 text-success" aria-hidden />
+            </div>
+            <div className="space-y-1.5">
+              <DialogTitle>Connected</DialogTitle>
+              <DialogDescription>
+                {platformDisplayName} has been connected successfully.
+              </DialogDescription>
+            </div>
+          </div>
         </DialogHeader>
-        <p className="text-sm text-muted-foreground">
+        <p className="type-caption">
           Closing in {secondsLeft} second{secondsLeft !== 1 ? "s" : ""}.
         </p>
         <DialogFooter>

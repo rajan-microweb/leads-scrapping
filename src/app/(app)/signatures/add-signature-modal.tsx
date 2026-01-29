@@ -33,6 +33,7 @@ import {
   Undo,
   Redo,
   RemoveFormatting,
+  Loader2,
 } from "lucide-react"
 import type { Signature } from "@/types/signatures"
 
@@ -309,13 +310,43 @@ export function AddSignatureModal({
     input.click()
   }
 
-  // Handle link button click
+  // Ensure URL has a protocol (Outlook and many clients require absolute URLs)
+  const normalizeUrl = (input: string): string => {
+    const trimmed = input.trim()
+    if (!trimmed) return trimmed
+    if (/^https?:\/\//i.test(trimmed)) return trimmed
+    return "https://" + trimmed
+  }
+
+  // Handle link button click: works with selected text, when cursor is in a link (edit), or when inserting new link
   const handleLinkButtonClick = () => {
     if (!editor) return
-    const url = window.prompt("Enter URL:")
-    if (url) {
-      editor.chain().focus().setLink({ href: url }).run()
+    const currentHref = editor.isActive("link") ? editor.getAttributes("link").href ?? "" : ""
+    const url = window.prompt("Enter URL:", currentHref)
+    if (url == null) return // User cancelled
+
+    const trimmed = url.trim()
+    if (!trimmed) {
+      if (editor.isActive("link")) {
+        editor.chain().focus().unsetLink().run()
+      }
+      return
     }
+
+    const href = normalizeUrl(trimmed)
+
+    if (editor.isActive("link")) {
+      editor.chain().focus().setLink({ href }).run()
+      return
+    }
+    if (!editor.state.selection.empty) {
+      editor.chain().focus().setLink({ href }).run()
+      return
+    }
+    // No selection: insert a new link so the URL is both the href and visible text (Outlook-safe)
+    const safeHref = href.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;")
+    const safeText = href.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    editor.chain().focus().insertContent(`<a href="${safeHref}">${safeText}</a>`).run()
   }
 
   // Reset editor when modal closes (only if not in edit mode or closing)
@@ -543,14 +574,17 @@ export function AddSignatureModal({
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting
-                ? isEditMode
-                  ? "Updating..."
-                  : "Creating..."
-                : isEditMode
-                  ? "Update Signature"
-                  : "Create Signature"}
+            <Button type="submit" disabled={isSubmitting} className="gap-2">
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                  {isEditMode ? "Updating..." : "Creating..."}
+                </>
+              ) : isEditMode ? (
+                "Update Signature"
+              ) : (
+                "Create Signature"
+              )}
             </Button>
           </DialogFooter>
         </form>
