@@ -40,14 +40,14 @@ export function IntegrationDetails({ metadata, platformName: _platformName, hide
   }
 
   return (
-    <div className={hideTitle ? "space-y-0.5" : "space-y-1 pt-1"}>
+    <div className={hideTitle ? "min-w-0 space-y-0.5" : "min-w-0 space-y-1 pt-1"}>
       {!hideTitle && (
         <p className="text-xs font-medium text-muted-foreground">Connected account</p>
       )}
-      <ul className="space-y-0.5 text-xs text-muted-foreground">
+      <ul className="min-w-0 space-y-0.5 break-words text-xs text-muted-foreground">
         {entries.map(({ label, value }) => (
-          <li key={label}>
-            {label}: {value}
+          <li key={label} className="break-words">
+            {label}: <span className="break-all">{value}</span>
           </li>
         ))}
       </ul>

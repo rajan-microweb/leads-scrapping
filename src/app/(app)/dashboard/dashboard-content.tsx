@@ -184,7 +184,7 @@ export function DashboardContent({
 
   if (error) {
     return (
-      <div className="mx-auto max-w-page-lg space-y-6">
+      <div className="w-full max-w-screen-2xl space-y-6 min-w-0">
         <h1 className="type-page-title">Dashboard</h1>
         <ErrorMessage message={error} onRetry={refetch} retryLabel="Refresh" />
       </div>
@@ -192,7 +192,7 @@ export function DashboardContent({
   }
 
   return (
-    <div className="mx-auto max-w-page-lg space-y-8">
+    <div className="w-full max-w-screen-2xl space-y-8 min-w-0">
       <header className="space-y-1">
         <h1 className="type-page-title">
           {userName ? `Welcome back, ${userName}` : "Dashboard"}

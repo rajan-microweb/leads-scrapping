@@ -19,7 +19,7 @@ export default async function UsersPage() {
 
   const { data: users } = await supabaseAdmin
     .from('User')
-    .select('id, name, email, role, "createdAt"')
+    .select('id, name, email, role, "createdAt", "updatedAt"')
     .order('createdAt', { ascending: false })
 
   return (
@@ -31,6 +31,7 @@ export default async function UsersPage() {
         email: u.email,
         role: u.role as "ADMIN" | "CLIENT",
         createdAt: new Date(u.createdAt).toISOString(),
+        updatedAt: u.updatedAt ? new Date(u.updatedAt).toISOString() : undefined,
       }))}
     />
   )

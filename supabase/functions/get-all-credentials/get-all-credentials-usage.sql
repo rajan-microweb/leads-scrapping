@@ -39,11 +39,18 @@ WHERE id IN ('user-id-1', 'user-id-2');
 --   - Content-Type: application/json
 
 -- Option 2: Create a view for easier REST API access
-CREATE OR REPLACE VIEW user_credentials_view AS
+-- Use security_invoker = true so the view runs as the calling user and respects RLS
+-- (avoids SECURITY DEFINER, which would bypass RLS and is flagged by Supabase lint)
+CREATE OR REPLACE VIEW public.user_credentials_view
+WITH (security_invoker = true)
+AS
 SELECT 
-  id as user_id,
-  get_all_credentials(id, false) as credentials
+  id AS user_id,
+  get_all_credentials(id, false) AS credentials
 FROM "User";
+
+GRANT SELECT ON public.user_credentials_view TO authenticated;
+GRANT SELECT ON public.user_credentials_view TO service_role;
 
 -- Then query via REST API:
 -- GET https://<project-ref>.supabase.co/rest/v1/user_credentials_view?user_id=eq.user-id-here

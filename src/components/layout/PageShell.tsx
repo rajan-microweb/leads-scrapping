@@ -4,15 +4,17 @@ type PageShellProps = {
   title: string
   description?: string
   actions?: React.ReactNode
-  maxWidth?: "sm" | "default" | "lg"
+  /** sm = narrow (forms), default = wide, lg = wide, full = use all available space */
+  maxWidth?: "sm" | "default" | "lg" | "full"
   children: React.ReactNode
   className?: string
 }
 
 const maxWidthClass = {
-  sm: "max-w-page-sm",
-  default: "max-w-page",
-  lg: "max-w-page-lg",
+  sm: "w-full max-w-page-sm mx-auto",
+  default: "w-full max-w-screen-2xl",
+  lg: "w-full max-w-screen-2xl",
+  full: "w-full min-w-0",
 } as const
 
 export function PageShell({
@@ -24,7 +26,7 @@ export function PageShell({
   className,
 }: PageShellProps) {
   return (
-    <div className={cn("mx-auto space-y-6", maxWidthClass[maxWidth], className)}>
+    <div className={cn("space-y-6 min-w-0", maxWidthClass[maxWidth], className)}>
       <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div className="space-y-1">
           <h1 className="type-page-title">{title}</h1>

@@ -44,7 +44,7 @@ export async function POST(request: Request) {
         updatedAt: new Date().toISOString(),
       })
       .eq('id', userId)
-      .select('id, name, email, role, "createdAt"')
+      .select('id, name, email, role, "createdAt", "updatedAt"')
       .single()
 
     if (error) {
@@ -62,6 +62,9 @@ export async function POST(request: Request) {
         email: updated.email,
         role: updated.role,
         createdAt: new Date(updated.createdAt).toISOString(),
+        updatedAt: updated.updatedAt
+          ? new Date(updated.updatedAt).toISOString()
+          : undefined,
       },
       { status: 200 },
     )

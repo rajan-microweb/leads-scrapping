@@ -386,12 +386,12 @@ export function IntegrationCard({ name, platformName, description, Icon, onConne
 
   return (
     <>
-    <div className="space-y-3">
+    <div className="space-y-3 min-w-0">
       <Dialog open={open} onOpenChange={setOpen}>
-        <Card className="flex items-center justify-between gap-4 border-border/70 transition-shadow duration-normal hover:shadow-dropdown">
-          <CardContent className="flex w-full items-center justify-between gap-4 py-4">
-            <div className="flex items-center gap-4">
-              <div className="flex h-10 w-10 items-center justify-center rounded-md bg-white border border-border overflow-hidden p-1.5">
+        <Card className="border-border/70 transition-shadow duration-normal hover:shadow-dropdown overflow-hidden">
+          <CardContent className="flex flex-col gap-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 flex-1 items-start gap-4">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-white border border-border overflow-hidden p-1.5">
                 {Icon ? (
                   <Icon className="h-5 w-5" aria-hidden="true" />
                 ) : platformName === "outlook" ? (
@@ -416,27 +416,28 @@ export function IntegrationCard({ name, platformName, description, Icon, onConne
                   <span className="text-base font-semibold">O</span>
                 )}
               </div>
-              <div className="space-y-0.5">
+              <div className="min-w-0 space-y-0.5">
                 <div className="text-sm font-medium leading-none">{name}</div>
                 {description && (
-                  <p className="text-xs text-muted-foreground max-w-md">{description}</p>
+                  <p className="text-xs text-muted-foreground break-words">{description}</p>
                 )}
               </div>
             </div>
 
+            <div className="flex shrink-0 flex-col items-stretch gap-1 sm:items-end">
           {isLoadingStatus ? (
-            <Button size="sm" disabled className="gap-2">
+            <Button size="sm" disabled className="gap-2 w-full sm:w-auto">
               <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" aria-hidden />
               Loading...
             </Button>
           ) : isConnected ? (
             <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
               <DialogTrigger asChild>
-                <Button size="sm" variant="outline">
+                <Button size="sm" variant="outline" className="w-full sm:w-auto">
                   Disconnect
                 </Button>
               </DialogTrigger>
-              <DialogContent>
+              <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md">
                 <DialogHeader>
                   <DialogTitle>Disconnect {name}</DialogTitle>
                   <DialogDescription>
@@ -450,11 +451,12 @@ export function IntegrationCard({ name, platformName, description, Icon, onConne
                   <p className="text-xs text-destructive">{errors.submit}</p>
                 )}
 
-                <DialogFooter className="pt-2">
+                <DialogFooter className="flex flex-col-reverse gap-2 pt-2 sm:flex-row">
                   <Button
                     variant="outline"
                     onClick={() => setDeleteDialogOpen(false)}
                     disabled={isDeleting}
+                    className="w-full sm:w-auto"
                   >
                     Cancel
                   </Button>
@@ -462,6 +464,7 @@ export function IntegrationCard({ name, platformName, description, Icon, onConne
                     variant="destructive"
                     onClick={handleDelete}
                     disabled={isDeleting}
+                    className="w-full sm:w-auto"
                   >
                     {isDeleting ? "Deleting..." : "Delete"}
                   </Button>
@@ -469,12 +472,12 @@ export function IntegrationCard({ name, platformName, description, Icon, onConne
               </DialogContent>
             </Dialog>
           ) : platformName === "outlook" ? (
-            <div className="flex flex-col items-end gap-1">
+            <>
               <Button
                 size="sm"
                 onClick={handleOutlookConnect}
                 disabled={isPendingConnection || (oauthUrl === null && oauthUrlError === null)}
-                className="gap-2"
+                className="gap-2 w-full sm:w-auto"
               >
                 {(isPendingConnection || (oauthUrl === null && oauthUrlError === null)) ? (
                   <>
@@ -486,8 +489,8 @@ export function IntegrationCard({ name, platformName, description, Icon, onConne
                 )}
               </Button>
               {(redirectError || oauthUrlError) && (
-                <div className="flex flex-col items-end gap-1">
-                  <p className="text-xs text-destructive" role="alert">{redirectError || oauthUrlError}</p>
+                <div className="w-full space-y-1 text-right">
+                  <p className="text-xs text-destructive break-words" role="alert">{redirectError || oauthUrlError}</p>
                   {redirectError === "Popup was blocked. Please allow popups and try again." &&
                     oauthUrl && (
                       <a
@@ -505,17 +508,18 @@ export function IntegrationCard({ name, platformName, description, Icon, onConne
                     )}
                 </div>
               )}
-            </div>
+            </>
           ) : (
             <DialogTrigger asChild>
-              <Button size="sm">Connect</Button>
+              <Button size="sm" className="w-full sm:w-auto">Connect</Button>
             </DialogTrigger>
           )}
+            </div>
         </CardContent>
       </Card>
 
       {platformName !== "outlook" && (
-      <DialogContent>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Connect {name}</DialogTitle>
           <DialogDescription>
@@ -574,8 +578,8 @@ export function IntegrationCard({ name, platformName, description, Icon, onConne
             <p className="text-xs text-destructive">{errors.submit}</p>
           )}
 
-          <DialogFooter className="pt-2">
-            <Button type="submit" className="ml-auto" disabled={isSubmitting}>
+          <DialogFooter className="flex flex-col-reverse gap-2 pt-2 sm:flex-row">
+            <Button type="submit" className="w-full sm:w-auto sm:ml-auto" disabled={isSubmitting}>
               {isSubmitting ? "Connecting..." : "Connect"}
             </Button>
           </DialogFooter>
@@ -585,11 +589,11 @@ export function IntegrationCard({ name, platformName, description, Icon, onConne
       </Dialog>
 
       {isConnected && (
-        <Card className="border-border/70">
+        <Card className="min-w-0 overflow-hidden border-border/70">
           <CardHeader className="pb-2">
-            <CardTitle className="type-card-title">{name} profile</CardTitle>
+            <CardTitle className="type-card-title truncate">{name} profile</CardTitle>
           </CardHeader>
-          <CardContent className="pt-0">
+          <CardContent className="min-w-0 pt-0">
             <IntegrationDetails
               metadata={metadata}
               platformName={platformName}
