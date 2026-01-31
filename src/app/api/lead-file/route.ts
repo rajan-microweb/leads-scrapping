@@ -13,11 +13,10 @@ export async function POST(request: Request) {
 
     const body = await request.json().catch(() => null)
 
-    if (!body || typeof body.fileName !== "string" || !body.fileName.trim()) {
-      return NextResponse.json({ error: "fileName is required" }, { status: 400 })
+    const sheetName = typeof body?.sheetName === "string" ? body.sheetName.trim() : ""
+    if (!sheetName) {
+      return NextResponse.json({ error: "sheetName is required" }, { status: 400 })
     }
-
-    const fileName = body.fileName.trim()
     let signatureId: string | null = null
 
     if (body.signatureId && typeof body.signatureId === "string") {
@@ -43,20 +42,20 @@ export async function POST(request: Request) {
     }
 
     await supabaseAdmin
-      .from('LeadFile')
+      .from('LeadSheets')
       .insert({
         id: generateId(),
         userId: session.user.id,
-        fileName,
+        sheetName,
         ...(signatureId ? { signatureId } : {}),
         uploadedAt: new Date().toISOString(),
       })
 
-    const { data: leadFiles } = await supabaseAdmin
-      .from('LeadFile')
+    const { data: leadSheets } = await supabaseAdmin
+      .from('LeadSheets')
       .select(`
         id,
-        fileName,
+        sheetName,
         uploadedAt,
         signature:signatures(name)
       `)
@@ -64,11 +63,11 @@ export async function POST(request: Request) {
       .order('uploadedAt', { ascending: false })
 
     return NextResponse.json(
-      (leadFiles || []).map((file: any) => ({
-        id: file.id,
-        fileName: file.fileName,
-        uploadedAt: file.uploadedAt,
-        signatureName: file.signature?.name ?? null,
+      (leadSheets || []).map((sheet: any) => ({
+        id: sheet.id,
+        sheetName: sheet.sheetName,
+        uploadedAt: sheet.uploadedAt,
+        signatureName: sheet.signature?.name ?? null,
       })),
       { status: 201 },
     )

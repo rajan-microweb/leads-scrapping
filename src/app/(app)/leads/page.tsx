@@ -49,10 +49,11 @@ import { ErrorMessage } from "@/components/ErrorMessage"
 import { TableSkeleton } from "@/components/TableSkeleton"
 import { Pagination } from "@/components/ui/pagination"
 
-type LeadFile = {
+type LeadSheet = {
   id: string
-  fileName: string
+  sheetName: string
   uploadedAt: string
+  sourceFileExtension?: string | null
   signatureName?: string | null
 }
 
@@ -67,71 +68,68 @@ type Signature = {
 const ALLOWED_EXTENSIONS = [".xlsx", ".xls", ".csv"]
 const CREATE_NEW_SIGNATURE_VALUE = "__create_new_signature__"
 
-type SortBy = "uploadedAt" | "fileName" | "signatureName" | "type"
+type SortBy = "uploadedAt" | "sheetName" | "signatureName" | "type"
 type SortOrder = "asc" | "desc"
 
-function getFileTypeFromName(fileName: string): string {
-  const dotIndex = fileName.lastIndexOf(".")
-  if (dotIndex === -1 || dotIndex === fileName.length - 1) return "Unknown"
-  return fileName.substring(dotIndex + 1).toUpperCase()
+function getSheetType(sheet: LeadSheet): string {
+  if (sheet.sourceFileExtension) return sheet.sourceFileExtension
+  return "—"
 }
 
-function filterLeadFiles(
-  files: LeadFile[],
+function filterLeadSheets(
+  sheets: LeadSheet[],
   searchQuery: string,
   filterSignature: string | null,
   filterType: string | null
-): LeadFile[] {
-  let result = files
+): LeadSheet[] {
+  let result = sheets
 
   if (searchQuery.trim()) {
     const q = searchQuery.toLowerCase()
     result = result.filter(
-      (f) =>
-        f.fileName.toLowerCase().includes(q) ||
-        (f.signatureName?.toLowerCase().includes(q) ?? false)
+      (s) =>
+        s.sheetName.toLowerCase().includes(q) ||
+        (s.signatureName?.toLowerCase().includes(q) ?? false)
     )
   }
 
   if (filterSignature) {
     if (filterSignature === "__no_signature__") {
-      result = result.filter((f) => !f.signatureName)
+      result = result.filter((s) => !s.signatureName)
     } else {
-      result = result.filter((f) => f.signatureName === filterSignature)
+      result = result.filter((s) => s.signatureName === filterSignature)
     }
   }
 
   if (filterType) {
     result = result.filter(
-      (f) => getFileTypeFromName(f.fileName) === filterType
+      (s) => getSheetType(s) === filterType
     )
   }
 
   return result
 }
 
-function sortLeadFiles(
-  files: LeadFile[],
+function sortLeadSheets(
+  sheets: LeadSheet[],
   sortBy: SortBy,
   sortOrder: SortOrder
-): LeadFile[] {
-  const sorted = [...files].sort((a, b) => {
+): LeadSheet[] {
+  const sorted = [...sheets].sort((a, b) => {
     let comparison = 0
     switch (sortBy) {
       case "uploadedAt":
         comparison =
           new Date(a.uploadedAt).getTime() - new Date(b.uploadedAt).getTime()
         break
-      case "fileName":
-        comparison = a.fileName.localeCompare(b.fileName)
+      case "sheetName":
+        comparison = a.sheetName.localeCompare(b.sheetName)
         break
       case "signatureName":
         comparison = (a.signatureName ?? "").localeCompare(b.signatureName ?? "")
         break
       case "type":
-        comparison = getFileTypeFromName(a.fileName).localeCompare(
-          getFileTypeFromName(b.fileName)
-        )
+        comparison = getSheetType(a).localeCompare(getSheetType(b))
         break
     }
     return sortOrder === "asc" ? comparison : -comparison
@@ -141,7 +139,7 @@ function sortLeadFiles(
 
 export default function LeadsPage() {
   const router = useRouter()
-  const [leadFiles, setLeadFiles] = useState<LeadFile[]>([])
+  const [leadSheets, setLeadSheets] = useState<LeadSheet[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
@@ -159,11 +157,11 @@ export default function LeadsPage() {
   const [createLeadsDialogOpen, setCreateLeadsDialogOpen] = useState(false)
   const [uploadStep, setUploadStep] = useState<1 | 2>(1)
   const [importOption, setImportOption] = useState<"new" | "add">("new")
-  const [targetLeadFileId, setTargetLeadFileId] = useState("")
+  const [targetLeadSheetId, setTargetLeadSheetId] = useState("")
   const [existingTablesSearch, setExistingTablesSearch] = useState("")
   const [connectAccountDialogOpen, setConnectAccountDialogOpen] = useState(false)
-  const [selectedLeadFiles, setSelectedLeadFiles] = useState<Set<string>>(new Set())
-  const [deletingLeadFileIds, setDeletingLeadFileIds] = useState<string[] | null>(null)
+  const [selectedLeadSheets, setSelectedLeadSheets] = useState<Set<string>>(new Set())
+  const [deletingLeadSheetIds, setDeletingLeadSheetIds] = useState<string[] | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
@@ -171,6 +169,7 @@ export default function LeadsPage() {
   const [sortOrder, setSortOrder] = useState<SortOrder>("desc")
   const [filterSignature, setFilterSignature] = useState<string | null>(null)
   const [filterType, setFilterType] = useState<string | null>(null)
+  const [sheetNameInput, setSheetNameInput] = useState("")
 
   const pageSize = 10
 
@@ -186,11 +185,12 @@ export default function LeadsPage() {
         throw new Error(message)
       }
       const data = Array.isArray(raw) ? raw : []
-      setLeadFiles(
-        data.map((item: LeadFile) => ({
+      setLeadSheets(
+        data.map((item: LeadSheet) => ({
           id: item.id,
-          fileName: item.fileName ?? "",
+          sheetName: item.sheetName ?? "",
           uploadedAt: item.uploadedAt ?? "",
+          sourceFileExtension: item.sourceFileExtension ?? null,
           signatureName: item.signatureName ?? null,
         })),
       )
@@ -272,28 +272,28 @@ export default function LeadsPage() {
     return () => { isMounted = false }
   }, [isLoading])
 
-  const filteredAndSortedLeadFiles = useMemo(() => {
-    const filtered = filterLeadFiles(
-      leadFiles,
+  const filteredAndSortedLeadSheets = useMemo(() => {
+    const filtered = filterLeadSheets(
+      leadSheets,
       searchQuery,
       filterSignature,
       filterType
     )
-    return sortLeadFiles(filtered, sortBy, sortOrder)
-  }, [leadFiles, searchQuery, filterSignature, filterType, sortBy, sortOrder])
+    return sortLeadSheets(filtered, sortBy, sortOrder)
+  }, [leadSheets, searchQuery, filterSignature, filterType, sortBy, sortOrder])
 
   const totalPages =
-    filteredAndSortedLeadFiles.length === 0
+    filteredAndSortedLeadSheets.length === 0
       ? 1
-      : Math.ceil(filteredAndSortedLeadFiles.length / pageSize)
+      : Math.ceil(filteredAndSortedLeadSheets.length / pageSize)
 
   const paginatedLeads = useMemo(
     () =>
-      filteredAndSortedLeadFiles.slice(
+      filteredAndSortedLeadSheets.slice(
         (currentPage - 1) * pageSize,
         currentPage * pageSize
       ),
-    [filteredAndSortedLeadFiles, currentPage, pageSize]
+    [filteredAndSortedLeadSheets, currentPage, pageSize]
   )
 
   useEffect(() => {
@@ -313,43 +313,41 @@ export default function LeadsPage() {
     }
   }, [successMessage])
 
-  const getFileType = getFileTypeFromName
-
   const handleDeleteClick = (id: string) => {
-    setDeletingLeadFileIds([id])
+    setDeletingLeadSheetIds([id])
   }
 
   const handleBulkDeleteClick = () => {
-    if (selectedLeadFiles.size > 0) {
-      setDeletingLeadFileIds(Array.from(selectedLeadFiles))
+    if (selectedLeadSheets.size > 0) {
+      setDeletingLeadSheetIds(Array.from(selectedLeadSheets))
     }
   }
 
   const handleDeleteConfirm = async () => {
-    if (!deletingLeadFileIds || deletingLeadFileIds.length === 0) return
+    if (!deletingLeadSheetIds || deletingLeadSheetIds.length === 0) return
     try {
       setIsDeleting(true)
       const res = await fetch("/api/leads", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids: deletingLeadFileIds }),
+        body: JSON.stringify({ ids: deletingLeadSheetIds }),
       })
       if (!res.ok) {
         const data = await res.json().catch(() => null)
-        throw new Error(data?.error ?? "Failed to delete lead file(s)")
+        throw new Error(data?.error ?? "Failed to delete lead sheet(s)")
       }
-      const count = deletingLeadFileIds.length
+      const count = deletingLeadSheetIds.length
       setSuccessMessage(
-        `Successfully deleted ${count} lead file${count > 1 ? "s" : ""}`
+        `Successfully deleted ${count} lead sheet${count > 1 ? "s" : ""}`
       )
-      setSelectedLeadFiles(new Set())
-      setDeletingLeadFileIds(null)
+      setSelectedLeadSheets(new Set())
+      setDeletingLeadSheetIds(null)
       loadLeads()
     } catch (err) {
       setError(
         err instanceof Error
           ? err.message
-          : "An unexpected error occurred while deleting lead file(s)."
+          : "An unexpected error occurred while deleting lead sheet(s)."
       )
     } finally {
       setIsDeleting(false)
@@ -358,19 +356,19 @@ export default function LeadsPage() {
 
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
-      setSelectedLeadFiles(
-        new Set(filteredAndSortedLeadFiles.map((f) => f.id))
+      setSelectedLeadSheets(
+        new Set(filteredAndSortedLeadSheets.map((s) => s.id))
       )
     } else {
-      setSelectedLeadFiles(new Set())
+      setSelectedLeadSheets(new Set())
     }
   }
 
-  const handleSelectLeadFile = (id: string, checked: boolean) => {
-    const next = new Set(selectedLeadFiles)
+  const handleSelectLeadSheet = (id: string, checked: boolean) => {
+    const next = new Set(selectedLeadSheets)
     if (checked) next.add(id)
     else next.delete(id)
-    setSelectedLeadFiles(next)
+    setSelectedLeadSheets(next)
   }
 
   const toggleSortOrder = () => {
@@ -388,17 +386,17 @@ export default function LeadsPage() {
 
   const signatureOptions = useMemo(() => {
     const names = new Set<string>()
-    leadFiles.forEach((f) => {
-      if (f.signatureName) names.add(f.signatureName)
+    leadSheets.forEach((s) => {
+      if (s.signatureName) names.add(s.signatureName)
     })
     return Array.from(names)
-  }, [leadFiles])
+  }, [leadSheets])
 
   const allSelected =
-    filteredAndSortedLeadFiles.length > 0 &&
-    filteredAndSortedLeadFiles.every((f) => selectedLeadFiles.has(f.id))
+    filteredAndSortedLeadSheets.length > 0 &&
+    filteredAndSortedLeadSheets.every((s) => selectedLeadSheets.has(s.id))
   const someSelected =
-    filteredAndSortedLeadFiles.some((f) => selectedLeadFiles.has(f.id)) &&
+    filteredAndSortedLeadSheets.some((s) => selectedLeadSheets.has(s.id)) &&
     !allSelected
 
   const handleCreateLeadsClick = async () => {
@@ -501,18 +499,18 @@ export default function LeadsPage() {
 
       {/* Delete confirmation */}
       <AlertDialog
-        open={deletingLeadFileIds !== null}
+        open={deletingLeadSheetIds !== null}
         onOpenChange={(open) => {
-          if (!open) setDeletingLeadFileIds(null)
+          if (!open) setDeletingLeadSheetIds(null)
         }}
       >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete lead file(s)</AlertDialogTitle>
             <AlertDialogDescription>
-              {deletingLeadFileIds?.length === 1
-                ? "Are you sure you want to delete this lead file? This cannot be undone."
-                : `Are you sure you want to delete these ${deletingLeadFileIds?.length ?? 0} lead files? This cannot be undone.`}
+              {deletingLeadSheetIds?.length === 1
+                ? "Are you sure you want to delete this lead sheet? This cannot be undone."
+                : `Are you sure you want to delete these ${deletingLeadSheetIds?.length ?? 0} lead sheets? This cannot be undone.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -546,7 +544,8 @@ export default function LeadsPage() {
           if (!open) {
             setUploadStep(1)
             setImportOption("new")
-            setTargetLeadFileId("")
+            setTargetLeadSheetId("")
+            setSheetNameInput("")
             setExistingTablesSearch("")
           }
         }}
@@ -558,8 +557,8 @@ export default function LeadsPage() {
               </DialogTitle>
               <DialogDescription>
                 {uploadStep === 1
-                  ? "Choose a CSV or Excel file and optionally select an email signature. Then choose whether to create a new table or add to an existing one."
-                  : "Create a new lead file with this data, or append rows to an existing file."}
+                  ? "Choose a CSV or Excel file and optionally select an email signature. Then choose whether to create a new sheet or add to an existing one."
+                  : "Create a new lead sheet with this data, or append rows to an existing sheet."}
               </DialogDescription>
             </DialogHeader>
 
@@ -596,8 +595,16 @@ export default function LeadsPage() {
                   return
                 }
 
-                if (importOption === "add" && !targetLeadFileId.trim()) {
-                  setUploadError("Please select an existing table to add data to.")
+                if (importOption === "new" && !sheetNameInput.trim()) {
+                  setUploadError("Sheet name is required.")
+                  return
+                }
+                if (importOption === "new" && sheetNameInput.trim().length > 255) {
+                  setUploadError("Sheet name must be 255 characters or less.")
+                  return
+                }
+                if (importOption === "add" && !targetLeadSheetId.trim()) {
+                  setUploadError("Please select an existing sheet to add data to.")
                   return
                 }
 
@@ -607,8 +614,11 @@ export default function LeadsPage() {
                   const formData = new FormData()
                   formData.append("file", selectedFile)
                   formData.append("option", importOption)
+                  if (importOption === "new") {
+                    formData.append("sheetName", sheetNameInput.trim())
+                  }
                   if (importOption === "add") {
-                    formData.append("targetLeadFileId", targetLeadFileId.trim())
+                    formData.append("targetLeadFileId", targetLeadSheetId.trim())
                   }
                   if (selectedSignatureId && selectedSignatureId !== CREATE_NEW_SIGNATURE_VALUE) {
                     formData.append("signatureId", selectedSignatureId)
@@ -628,58 +638,22 @@ export default function LeadsPage() {
 
                   const importData = (await importRes.json()) as {
                     id: string
-                    fileName: string
+                    sheetName?: string
                     rowCount: number
                   }
 
                   await loadLeads()
 
-                  let selectedSignature: Signature | null = null
-                  if (selectedSignatureId && selectedSignatureId !== CREATE_NEW_SIGNATURE_VALUE) {
-                    selectedSignature =
-                      signatures.find((sig) => sig.id === selectedSignatureId) ?? null
-                  }
-
-                  const n8nFormData = new FormData()
-                  n8nFormData.append("file", selectedFile)
-                  try {
-                    const profileRes = await fetch("/api/profile")
-                    if (profileRes.ok) {
-                      const data = await profileRes.json()
-                      if (data && !data.error && data.id) {
-                        n8nFormData.append("userId", data.id)
-                      }
-                    }
-                  } catch {
-                    /* continue */
-                  }
-                  if (selectedSignature) {
-                    n8nFormData.append("signatureId", selectedSignature.id ?? "")
-                    n8nFormData.append("signatureName", selectedSignature.name ?? "")
-                    n8nFormData.append("signatureContent", selectedSignature.content ?? "")
-                    n8nFormData.append("signatureCreatedAt", selectedSignature.createdAt ?? "")
-                    n8nFormData.append("signatureUpdatedAt", selectedSignature.updatedAt ?? "")
-                  }
-                  n8nFormData.append("leadFileId", importData.id)
-
-                  try {
-                    await fetch(
-                      "https://n8n.srv1248804.hstgr.cloud/webhook/get-leads",
-                      { method: "POST", body: n8nFormData },
-                    )
-                  } catch {
-                    /* n8n is optional; continue */
-                  }
-
                   setUploadSuccess(
-                    `Imported ${importData.rowCount} row(s)${importOption === "new" ? " into a new table." : "."}`,
+                    `Imported ${importData.rowCount} row(s)${importOption === "new" ? " into a new sheet." : "."}`,
                   )
                   setSelectedFile(null)
                   setSelectedSignatureId("")
                   setFileInputKey((k) => k + 1)
                   setUploadStep(1)
                   setImportOption("new")
-                  setTargetLeadFileId("")
+                  setTargetLeadSheetId("")
+                  setSheetNameInput("")
                   setCreateLeadsDialogOpen(false)
 
                   if (importOption === "new") {
@@ -689,7 +663,7 @@ export default function LeadsPage() {
                   setUploadError(
                     err instanceof Error
                       ? err.message
-                      : "An unexpected error occurred while uploading the file.",
+                      : "An unexpected error occurred while uploading.",
                   )
                 } finally {
                   setUploading(false)
@@ -750,7 +724,7 @@ export default function LeadsPage() {
                       htmlFor="lead-file"
                       className="text-sm font-medium text-foreground"
                     >
-                      Leads file
+                      Upload file
                     </label>
                     <input
                       key={fileInputKey}
@@ -782,12 +756,35 @@ export default function LeadsPage() {
                   <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
                     {selectedFile?.name ?? "No file selected"}
                   </div>
+                  {importOption === "new" && (
+                    <div className="space-y-2">
+                      <Label htmlFor="sheet-name" className="text-sm font-medium text-foreground">
+                        Sheet Name
+                      </Label>
+                      <Input
+                        id="sheet-name"
+                        placeholder="e.g. Q1 Prospects, Client List"
+                        value={sheetNameInput}
+                        onChange={(e) => {
+                          setSheetNameInput(e.target.value)
+                          setUploadError(null)
+                        }}
+                        maxLength={255}
+                        className="w-full"
+                        aria-required="true"
+                        aria-describedby="sheet-name-help"
+                      />
+                      <p id="sheet-name-help" className="text-xs text-muted-foreground">
+                        Give this leads sheet a name. This is how you&apos;ll identify it in your leads.
+                      </p>
+                    </div>
+                  )}
                   <div className="grid gap-3 sm:grid-cols-2">
                     <button
                       type="button"
                       onClick={() => {
                         setImportOption("new")
-                        setTargetLeadFileId("")
+                        setTargetLeadSheetId("")
                         setUploadError(null)
                       }}
                       className={`flex flex-col items-center gap-2 rounded-lg border-2 p-4 text-left transition-colors ${
@@ -797,9 +794,9 @@ export default function LeadsPage() {
                       }`}
                     >
                       <FileSpreadsheet className="h-8 w-8 text-muted-foreground" />
-                      <span className="font-medium">New blank table</span>
+                      <span className="font-medium">New sheet</span>
                       <span className="text-xs text-muted-foreground">
-                        Create a new lead file and import rows into it.
+                        Create a new lead sheet and import rows into it.
                       </span>
                     </button>
                     <button
@@ -815,49 +812,49 @@ export default function LeadsPage() {
                       }`}
                     >
                       <Plus className="h-8 w-8 text-muted-foreground" />
-                      <span className="font-medium">Add to existing table</span>
+                      <span className="font-medium">Add to existing sheet</span>
                       <span className="text-xs text-muted-foreground">
-                        Append rows to a lead file you already have.
+                        Append rows to a lead sheet you already have.
                       </span>
                     </button>
                   </div>
                   {importOption === "add" && (
                     <div className="space-y-2">
                       <Label className="text-sm font-medium text-foreground">
-                        Search existing tables
+                        Search existing sheets
                       </Label>
                       <Input
-                        placeholder="Search by file name..."
+                        placeholder="Search by sheet name..."
                         value={existingTablesSearch}
                         onChange={(e) => setExistingTablesSearch(e.target.value)}
                         className="w-full"
                       />
                       <div className="max-h-48 overflow-y-auto rounded-md border">
-                        {leadFiles
-                          .filter((f) =>
+                        {leadSheets
+                          .filter((s) =>
                             existingTablesSearch.trim()
-                              ? f.fileName
+                              ? s.sheetName
                                   .toLowerCase()
                                   .includes(existingTablesSearch.toLowerCase())
                               : true,
                           )
-                          .map((f) => (
+                          .map((s) => (
                             <button
-                              key={f.id}
+                              key={s.id}
                               type="button"
-                              onClick={() => setTargetLeadFileId(f.id)}
+                              onClick={() => setTargetLeadSheetId(s.id)}
                               className={`block w-full px-3 py-2 text-left text-sm ${
-                                targetLeadFileId === f.id
+                                targetLeadSheetId === s.id
                                   ? "bg-primary/10 font-medium"
                                   : "hover:bg-muted/50"
                               }`}
                             >
-                              {f.fileName}
+                              {s.sheetName}
                             </button>
                           ))}
-                        {leadFiles.length === 0 && (
+                        {leadSheets.length === 0 && (
                           <p className="px-3 py-2 text-sm text-muted-foreground">
-                            No lead files yet. Use &quot;New blank table&quot; first.
+                            No lead sheets yet. Use &quot;New sheet&quot; first.
                           </p>
                         )}
                       </div>
@@ -905,13 +902,13 @@ export default function LeadsPage() {
       <div className="grid gap-3 sm:grid-cols-3">
         <Card className="border-dashed">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <span className="type-caption font-medium">Total files</span>
+            <span className="type-caption font-medium">Total sheets</span>
             <FileSpreadsheet className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-semibold">{leadFiles.length}</div>
+            <div className="text-2xl font-semibold">{leadSheets.length}</div>
             <p className="type-caption mt-1">
-              {leadFiles.length === 1 ? "Single upload so far" : "All uploaded lead files"}
+              {leadSheets.length === 1 ? "Single sheet so far" : "All lead sheets"}
             </p>
           </CardContent>
         </Card>
@@ -923,11 +920,11 @@ export default function LeadsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-sm font-medium">
-              {leadFiles.length === 0
-                ? "No uploads yet"
-                : new Date(leadFiles[0].uploadedAt).toLocaleString()}
+              {leadSheets.length === 0
+                ? "No sheets yet"
+                : new Date(leadSheets[0].uploadedAt).toLocaleString()}
             </div>
-            <p className="type-caption mt-1">Most recent file you&apos;ve added</p>
+            <p className="type-caption mt-1">Most recent sheet you&apos;ve added</p>
           </CardContent>
         </Card>
 
@@ -939,7 +936,7 @@ export default function LeadsPage() {
             <div className="text-sm font-medium">
               Page {currentPage} of {totalPages}
             </div>
-            <p className="type-caption mt-1">Showing up to {pageSize} files per page</p>
+            <p className="type-caption mt-1">Showing up to {pageSize} sheets per page</p>
           </CardContent>
         </Card>
       </div>
@@ -947,25 +944,25 @@ export default function LeadsPage() {
       <Card className="border border-border/60 shadow-card min-w-0 overflow-hidden">
         <CardHeader>
           <CardTitle className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between type-card-title">
-            <span>Lead files</span>
+            <span>Lead sheets</span>
             <span className="type-caption font-normal">
-              Keep your uploads organized and easy to scan.
+              Keep your lead sheets organized and easy to scan.
             </span>
           </CardTitle>
         </CardHeader>
         <CardContent className="min-w-0">
-          {!isLoading && !error && leadFiles.length > 0 && (
+          {!isLoading && !error && leadSheets.length > 0 && (
             <>
               <div className="mb-4 flex flex-col gap-4">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
                   <Input
                     type="search"
-                    placeholder="Search by file name or signature..."
+                    placeholder="Search by sheet name or signature..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="pl-9"
-                    aria-label="Search lead files"
+                    aria-label="Search lead sheets"
                   />
                 </div>
                 <div className="flex flex-col flex-wrap gap-4 sm:flex-row sm:items-center">
@@ -977,7 +974,7 @@ export default function LeadsPage() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="uploadedAt">Date</SelectItem>
-                        <SelectItem value="fileName">File name</SelectItem>
+                        <SelectItem value="sheetName">Sheet name</SelectItem>
                         <SelectItem value="signatureName">Signature</SelectItem>
                         <SelectItem value="type">Type</SelectItem>
                       </SelectContent>
@@ -1049,16 +1046,16 @@ export default function LeadsPage() {
                 </div>
               </div>
 
-              {selectedLeadFiles.size > 0 && (
+              {selectedLeadSheets.size > 0 && (
                 <div className="mb-4 flex items-center justify-between rounded-md bg-muted p-3 transition-colors duration-normal">
                   <span className="type-body text-muted-foreground">
-                    {selectedLeadFiles.size} file{selectedLeadFiles.size !== 1 ? "s" : ""} selected
+                    {selectedLeadSheets.size} sheet{selectedLeadSheets.size !== 1 ? "s" : ""} selected
                   </span>
                   <div className="flex items-center gap-2">
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => setSelectedLeadFiles(new Set())}
+                      onClick={() => setSelectedLeadSheets(new Set())}
                     >
                       Clear selection
                     </Button>
@@ -1081,10 +1078,10 @@ export default function LeadsPage() {
             <TableSkeleton rows={5} columns={6} />
           ) : error ? (
             <ErrorMessage message={error} onRetry={loadLeads} />
-          ) : leadFiles.length === 0 ? (
+          ) : leadSheets.length === 0 ? (
             <EmptyState
               icon={UploadCloud}
-              title="No lead files uploaded yet"
+              title="No lead sheets yet"
               description='Start by uploading a CSV or Excel file using the "Create Leads" button above.'
               action={
                 <Button onClick={handleCreateLeadsClick} disabled={isCheckingOutlook} className="gap-2">
@@ -1093,11 +1090,11 @@ export default function LeadsPage() {
                 </Button>
               }
             />
-          ) : filteredAndSortedLeadFiles.length === 0 ? (
+          ) : filteredAndSortedLeadSheets.length === 0 ? (
             <EmptyState
               icon={Search}
-              title="No lead files match your search or filters"
-              description="Try adjusting your search or filters, or clear them to see all files."
+              title="No lead sheets match your search or filters"
+              description="Try adjusting your search or filters, or clear them to see all sheets."
               action={
                 <Button variant="outline" onClick={clearSearchAndFilters}>
                   Clear search and filters
@@ -1113,10 +1110,10 @@ export default function LeadsPage() {
                     <Checkbox
                       checked={allSelected ? true : someSelected ? "indeterminate" : false}
                       onCheckedChange={handleSelectAll}
-                      aria-label="Select all lead files on this page"
+                      aria-label="Select all lead sheets on this page"
                     />
                   </TableHead>
-                  <TableHead>File Name</TableHead>
+                  <TableHead>Sheet Name</TableHead>
                   <TableHead>Type</TableHead>
                   <TableHead>Signature</TableHead>
                   <TableHead>Uploaded At</TableHead>
@@ -1124,42 +1121,42 @@ export default function LeadsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {paginatedLeads.map((file) => (
+                {paginatedLeads.map((sheet) => (
                   <TableRow
-                    key={file.id}
+                    key={sheet.id}
                     role="button"
                     tabIndex={0}
-                    className={`cursor-pointer hover:bg-muted/50 transition-colors duration-normal ${selectedLeadFiles.has(file.id) ? "bg-muted/50" : ""}`}
-                    onClick={() => router.push(`/leads/${file.id}`)}
+                    className={`cursor-pointer hover:bg-muted/50 transition-colors duration-normal ${selectedLeadSheets.has(sheet.id) ? "bg-muted/50" : ""}`}
+                    onClick={() => router.push(`/leads/${sheet.id}`)}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" || e.key === " ") {
                         e.preventDefault()
-                        router.push(`/leads/${file.id}`)
+                        router.push(`/leads/${sheet.id}`)
                       }
                     }}
                   >
                     <TableCell onClick={(e) => e.stopPropagation()}>
                       <Checkbox
-                        checked={selectedLeadFiles.has(file.id)}
+                        checked={selectedLeadSheets.has(sheet.id)}
                         onCheckedChange={(checked) =>
-                          handleSelectLeadFile(file.id, checked as boolean)
+                          handleSelectLeadSheet(sheet.id, checked as boolean)
                         }
-                        aria-label={`Select ${file.fileName}`}
+                        aria-label={`Select ${sheet.sheetName}`}
                       />
                     </TableCell>
-                    <TableCell className="font-medium">{file.fileName}</TableCell>
+                    <TableCell className="font-medium">{sheet.sheetName}</TableCell>
                     <TableCell>
                       <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
-                        {getFileType(file.fileName)}
+                        {getSheetType(sheet)}
                       </span>
                     </TableCell>
                     <TableCell>
                       <span className="text-xs text-muted-foreground">
-                        {file.signatureName || "No signature"}
+                        {sheet.signatureName || "No signature"}
                       </span>
                     </TableCell>
                     <TableCell>
-                      {new Date(file.uploadedAt).toLocaleString()}
+                      {new Date(sheet.uploadedAt).toLocaleString()}
                     </TableCell>
                     <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                       <Button
@@ -1167,11 +1164,11 @@ export default function LeadsPage() {
                         size="sm"
                         onClick={(e) => {
                           e.stopPropagation()
-                          handleDeleteClick(file.id)
+                          handleDeleteClick(sheet.id)
                         }}
                         disabled={isDeleting}
                         className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-                        aria-label={`Delete ${file.fileName}`}
+                        aria-label={`Delete ${sheet.sheetName}`}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -1184,9 +1181,9 @@ export default function LeadsPage() {
                   currentPage={currentPage}
                   totalPages={totalPages}
                   onPageChange={setCurrentPage}
-                  totalItems={filteredAndSortedLeadFiles.length}
+                  totalItems={filteredAndSortedLeadSheets.length}
                   pageSize={pageSize}
-                  itemLabel="file"
+                  itemLabel="sheet"
                   filterNote={hasActiveFilters ? " (filtered)" : undefined}
                 />
               </TableCaption>

@@ -3,11 +3,28 @@
 import { useEffect, useState, useCallback } from "react"
 import Link from "next/link"
 import { useParams } from "next/navigation"
-import { ArrowLeft, FileSpreadsheet, Loader2, Plus } from "lucide-react"
+import { ArrowLeft, FileSpreadsheet, Loader2, Plus, Search, Trash2, Pencil } from "lucide-react"
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import {
   Table,
   TableBody,
@@ -18,28 +35,25 @@ import {
 } from "@/components/ui/table"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Pagination } from "@/components/ui/pagination"
+import { Toast, ToastDescription, ToastTitle } from "@/components/ui/toast"
+import {
+  LEAD_ROW_FIELDS,
+  LEAD_ROW_FILTERABLE_FIELDS,
+  LEAD_ROW_SORTABLE_KEYS,
+  LEAD_ROW_TABLE_COLUMNS,
+  type LeadRowFieldKey,
+} from "@/config/lead-row-fields"
+import { LeadRowFormSidebar, type LeadRow } from "@/components/leads/LeadRowFormSidebar"
 import { PageShell } from "@/components/layout/PageShell"
 import { EmptyState } from "@/components/EmptyState"
 import { ErrorMessage } from "@/components/ErrorMessage"
 
-type LeadFile = {
+type LeadSheet = {
   id: string
-  fileName: string
+  sheetName: string
   uploadedAt: string
+  sourceFileExtension?: string | null
   signatureName?: string | null
-}
-
-type LeadRow = {
-  id: string
-  rowIndex: number
-  businessEmail: string | null
-  websiteUrl: string | null
-}
-
-function getFileTypeFromName(fileName: string): string {
-  const dotIndex = fileName.lastIndexOf(".")
-  if (dotIndex === -1 || dotIndex === fileName.length - 1) return "Unknown"
-  return fileName.substring(dotIndex + 1).toUpperCase()
 }
 
 const backToLeadsButton = (
@@ -74,11 +88,14 @@ function LeadDetailNav({ currentLabel }: { currentLabel: string }) {
 }
 
 const ROWS_PAGE_SIZE = 50
+const SEARCH_DEBOUNCE_MS = 300
+
+type SortOrder = "asc" | "desc"
 
 export default function LeadDetailPage() {
   const params = useParams()
   const id = typeof params?.id === "string" ? params.id : null
-  const [leadFile, setLeadFile] = useState<LeadFile | null>(null)
+  const [leadSheet, setLeadSheet] = useState<LeadSheet | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [notFound, setNotFound] = useState(false)
@@ -88,10 +105,22 @@ export default function LeadDetailPage() {
   const [rowsError, setRowsError] = useState<string | null>(null)
   const [rowsPage, setRowsPage] = useState(1)
   const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set())
-  const [addRowsCount, setAddRowsCount] = useState(10)
-  const [addingRows, setAddingRows] = useState(false)
+  const [searchInput, setSearchInput] = useState("")
+  const [searchQuery, setSearchQuery] = useState("")
+  const [sortBy, setSortBy] = useState<LeadRowFieldKey>(
+    LEAD_ROW_SORTABLE_KEYS[0] ?? "rowIndex"
+  )
+  const [sortOrder, setSortOrder] = useState<SortOrder>("asc")
+  const [filterValues, setFilterValues] = useState<Record<string, string | null>>({})
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [sidebarMode, setSidebarMode] = useState<"add" | "edit">("add")
+  const [editingRow, setEditingRow] = useState<LeadRow | null>(null)
+  const [deletingRowIds, setDeletingRowIds] = useState<string[] | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [toastOpen, setToastOpen] = useState(false)
+  const [toastMessage, setToastMessage] = useState("")
 
-  const loadLeadFile = useCallback(async () => {
+  const loadLeadSheet = useCallback(async () => {
     if (!id) {
       setIsLoading(false)
       setNotFound(true)
@@ -104,23 +133,23 @@ export default function LeadDetailPage() {
       const res = await fetch(`/api/leads/${encodeURIComponent(id)}`)
       if (res.status === 404) {
         setNotFound(true)
-        setLeadFile(null)
+        setLeadSheet(null)
         return
       }
       if (!res.ok) {
         const data = await res.json().catch(() => null)
-        throw new Error(data?.error ?? "Failed to load lead file")
+        throw new Error(data?.error ?? "Failed to load lead sheet")
       }
-      const data = (await res.json()) as LeadFile
-      setLeadFile(data)
+      const data = (await res.json()) as LeadSheet
+      setLeadSheet(data)
       setNotFound(false)
     } catch (err) {
       setError(
         err instanceof Error
           ? err.message
-          : "An unexpected error occurred while loading the lead file."
+          : "An unexpected error occurred while loading the lead sheet."
       )
-      setLeadFile(null)
+      setLeadSheet(null)
       setNotFound(false)
     } finally {
       setIsLoading(false)
@@ -132,10 +161,18 @@ export default function LeadDetailPage() {
     try {
       setRowsLoading(true)
       setRowsError(null)
-      const from = (rowsPage - 1) * ROWS_PAGE_SIZE
-      const to = from + ROWS_PAGE_SIZE - 1
+      const params = new URLSearchParams()
+      params.set("page", String(rowsPage))
+      params.set("pageSize", String(ROWS_PAGE_SIZE))
+      if (searchQuery.trim()) params.set("search", searchQuery.trim())
+      params.set("sortBy", sortBy)
+      params.set("sortOrder", sortOrder)
+      if (filterValues["businessEmail"] === "true") params.set("hasEmail", "true")
+      if (filterValues["businessEmail"] === "false") params.set("hasEmail", "false")
+      if (filterValues["websiteUrl"] === "true") params.set("hasUrl", "true")
+      if (filterValues["websiteUrl"] === "false") params.set("hasUrl", "false")
       const res = await fetch(
-        `/api/lead-files/${encodeURIComponent(id)}/rows?page=${rowsPage}&pageSize=${ROWS_PAGE_SIZE}`
+        `/api/lead-files/${encodeURIComponent(id)}/rows?${params.toString()}`
       )
       if (!res.ok) {
         const data = await res.json().catch(() => null)
@@ -153,15 +190,101 @@ export default function LeadDetailPage() {
     } finally {
       setRowsLoading(false)
     }
-  }, [id, rowsPage])
+  }, [id, rowsPage, searchQuery, sortBy, sortOrder, filterValues])
 
   useEffect(() => {
-    void loadLeadFile()
-  }, [loadLeadFile])
+    const t = setTimeout(() => setSearchQuery(searchInput), SEARCH_DEBOUNCE_MS)
+    return () => clearTimeout(t)
+  }, [searchInput])
 
   useEffect(() => {
-    if (id && leadFile) void loadRows()
-  }, [id, leadFile, loadRows])
+    setRowsPage(1)
+  }, [searchQuery, sortBy, sortOrder, filterValues])
+
+  useEffect(() => {
+    if (rowsPage > 1 && rowsTotal > 0) {
+      const maxPage = Math.ceil(rowsTotal / ROWS_PAGE_SIZE)
+      if (rowsPage > maxPage) setRowsPage(Math.max(1, maxPage))
+    }
+  }, [rowsPage, rowsTotal])
+
+  useEffect(() => {
+    void loadLeadSheet()
+  }, [loadLeadSheet])
+
+  useEffect(() => {
+    if (id && leadSheet) void loadRows()
+  }, [id, leadSheet, loadRows])
+
+  const hasActiveFilters = Boolean(
+    searchQuery.trim() ||
+      LEAD_ROW_FILTERABLE_FIELDS.some((f) => filterValues[f.key] != null)
+  )
+
+  const handleDeleteClick = (rowId: string) => {
+    setDeletingRowIds([rowId])
+  }
+
+  const handleBulkDeleteClick = () => {
+    if (selectedRowIds.size > 0) setDeletingRowIds(Array.from(selectedRowIds))
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (!id || !deletingRowIds || deletingRowIds.length === 0) return
+    setIsDeleting(true)
+    try {
+      const res = await fetch(
+        `/api/lead-files/${encodeURIComponent(id)}/rows`,
+        {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ids: deletingRowIds }),
+        }
+      )
+      if (!res.ok) throw new Error("Failed to delete rows")
+      setSelectedRowIds((prev) => {
+        const next = new Set(prev)
+        deletingRowIds.forEach((rid) => next.delete(rid))
+        return next
+      })
+      setDeletingRowIds(null)
+      await loadRows()
+    } catch {
+      setRowsError("Failed to delete rows")
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
+  const handleAddClick = () => {
+    setSidebarMode("add")
+    setEditingRow(null)
+    setSidebarOpen(true)
+  }
+
+  const handleEditClick = (row: LeadRow) => {
+    setSidebarMode("edit")
+    setEditingRow(row)
+    setSidebarOpen(true)
+  }
+
+  const handleSidebarSuccess = (mode: "add" | "edit") => {
+    setToastMessage(mode === "add" ? "Row added" : "Row updated")
+    setToastOpen(true)
+    void loadRows()
+  }
+
+  const clearFilters = () => {
+    setSearchInput("")
+    setSearchQuery("")
+    setFilterValues(
+      LEAD_ROW_FILTERABLE_FIELDS.reduce(
+        (acc, f) => ({ ...acc, [f.key]: null }),
+        {} as Record<string, string | null>
+      )
+    )
+    setRowsPage(1)
+  }
 
   if (isLoading) {
     return (
@@ -224,17 +347,16 @@ export default function LeadDetailPage() {
         maxWidth="default"
         className="space-y-6"
       >
-        <LeadDetailNav currentLabel="Lead file" />
-        <ErrorMessage message={error} onRetry={loadLeadFile} />
+        <LeadDetailNav currentLabel="Lead sheet" />
+        <ErrorMessage message={error} onRetry={loadLeadSheet} />
       </PageShell>
     )
   }
 
-  if (!leadFile) {
+  if (!leadSheet) {
     return <></>
   }
 
-  const fileType = getFileTypeFromName(leadFile.fileName)
   const rowsTotalPages = Math.max(
     1,
     Math.ceil(rowsTotal / ROWS_PAGE_SIZE)
@@ -265,81 +387,16 @@ export default function LeadDetailPage() {
     })
   }
 
-  const handleAddRows = async () => {
-    if (!id || addingRows) return
-    const n = Math.max(1, Math.min(100, addRowsCount))
-    setAddingRows(true)
-    try {
-      const res = await fetch(
-        `/api/lead-files/${encodeURIComponent(id)}/rows`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            rows: Array.from({ length: n }, () => ({
-              businessEmail: null,
-              websiteUrl: null,
-            })),
-          }),
-        }
-      )
-      if (!res.ok) throw new Error("Failed to add rows")
-      await loadRows()
-    } catch {
-      setRowsError("Failed to add rows")
-    } finally {
-      setAddingRows(false)
-    }
-  }
-
   return (
     <PageShell
-      title={leadFile.fileName}
-      description="Details for this uploaded lead file."
+      title={leadSheet.sheetName}
+      description="Details for this leads sheet."
       actions={backToLeadsButton}
       maxWidth="default"
       className="space-y-6"
     >
-      <LeadDetailNav currentLabel={leadFile.fileName} />
+      <LeadDetailNav currentLabel={leadSheet.sheetName} />
       <div className="grid gap-6">
-        <Card className="border border-border/60 shadow-card">
-          <CardHeader>
-            <CardTitle className="type-card-title">File details</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-1">
-              <span className="type-caption text-muted-foreground">
-                File name
-              </span>
-              <p className="type-body font-medium">{leadFile.fileName}</p>
-            </div>
-            <div className="grid gap-1">
-              <span className="type-caption text-muted-foreground">Type</span>
-              <p className="type-body">
-                <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-sm font-medium text-muted-foreground">
-                  {fileType}
-                </span>
-              </p>
-            </div>
-            <div className="grid gap-1">
-              <span className="type-caption text-muted-foreground">
-                Uploaded at
-              </span>
-              <p className="type-body">
-                {new Date(leadFile.uploadedAt).toLocaleString()}
-              </p>
-            </div>
-            <div className="grid gap-1">
-              <span className="type-caption text-muted-foreground">
-                Signature
-              </span>
-              <p className="type-body text-muted-foreground">
-                {leadFile.signatureName ?? "No signature"}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-
         <Card className="border border-border/60 shadow-card min-w-0 overflow-hidden">
           <CardHeader>
             <CardTitle className="type-card-title">Lead rows</CardTitle>
@@ -360,109 +417,288 @@ export default function LeadDetailPage() {
                 Loading rows...
               </div>
             )}
-            {!rowsError && !rowsLoading && rows.length === 0 && (
-              <p className="text-sm text-muted-foreground">
-                No rows yet. Import a file from the Leads page to see data here, or add rows below.
-              </p>
-            )}
-            {!rowsError && !rowsLoading && rows.length > 0 && (
+            {!rowsError && !rowsLoading && (
               <>
-                <div className="w-full overflow-auto rounded-md border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-10">
-                          <Checkbox
-                            checked={allOnPageSelected}
-                            onCheckedChange={(v) =>
-                              handleSelectAllRows(v === true)
-                            }
-                            aria-label="Select all rows on this page"
-                          />
-                        </TableHead>
-                        <TableHead className="w-12">%</TableHead>
-                        <TableHead>Business Emails</TableHead>
-                        <TableHead>Website URLs</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {rows.map((row) => (
-                        <TableRow key={row.id}>
-                          <TableCell>
-                            <Checkbox
-                              checked={selectedRowIds.has(row.id)}
-                              onCheckedChange={(v) =>
-                                handleSelectRow(row.id, v === true)
-                              }
-                              aria-label={`Select row ${row.rowIndex + 1}`}
-                            />
-                          </TableCell>
-                          <TableCell className="text-muted-foreground">
-                            {row.rowIndex + 1}
-                          </TableCell>
-                          <TableCell className="max-w-[200px] truncate" title={row.businessEmail ?? ""}>
-                            {row.businessEmail ?? "—"}
-                          </TableCell>
-                          <TableCell className="max-w-[200px] truncate" title={row.websiteUrl ?? ""}>
-                            {row.websiteUrl ?? "—"}
-                          </TableCell>
-                        </TableRow>
+                {(rowsTotal > 0 || hasActiveFilters) && (
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="relative w-full sm:max-w-sm">
+                      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+                      <Input
+                        type="search"
+                        placeholder="Search rows..."
+                        value={searchInput}
+                        onChange={(e) => setSearchInput(e.target.value)}
+                        className="pl-9"
+                        aria-label="Search lead rows"
+                      />
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Select value={sortBy} onValueChange={(v) => setSortBy(v as LeadRowFieldKey)}>
+                        <SelectTrigger className="w-[180px]">
+                          <SelectValue placeholder="Sort by" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {LEAD_ROW_FIELDS.filter((f) => f.sortable).map((f) => (
+                            <SelectItem key={f.key} value={f.key}>
+                              {f.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Select value={sortOrder} onValueChange={(v) => setSortOrder(v as SortOrder)}>
+                        <SelectTrigger className="w-[130px]">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="asc">Ascending</SelectItem>
+                          <SelectItem value="desc">Descending</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      {LEAD_ROW_FILTERABLE_FIELDS.map((field) => (
+                        <Select
+                          key={field.key}
+                          value={filterValues[field.key] ?? "any"}
+                          onValueChange={(v) =>
+                            setFilterValues((prev) => ({
+                              ...prev,
+                              [field.key]: v === "any" ? null : v,
+                            }))
+                          }
+                        >
+                          <SelectTrigger className="w-[140px]">
+                            <SelectValue placeholder={`Has ${field.label.toLowerCase()}`} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="any">Any</SelectItem>
+                            <SelectItem value="true">Has {field.label.toLowerCase()}</SelectItem>
+                            <SelectItem value="false">No {field.label.toLowerCase()}</SelectItem>
+                          </SelectContent>
+                        </Select>
                       ))}
-                    </TableBody>
-                  </Table>
-                </div>
-                {rowsTotalPages > 1 && (
-                  <Pagination
-                    currentPage={rowsPage}
-                    totalPages={rowsTotalPages}
-                    onPageChange={setRowsPage}
-                    totalItems={rowsTotal}
-                    pageSize={ROWS_PAGE_SIZE}
-                    itemLabel="row"
-                  />
+                    </div>
+                  </div>
+                )}
+                {rows.length === 0 ? (
+                  <div className="space-y-2">
+                    <p className="text-sm text-muted-foreground">
+                      {hasActiveFilters
+                        ? "No rows match your filters."
+                        : "No rows yet. Import a file from the Leads page to see data here, or add a row below."}
+                    </p>
+                    {hasActiveFilters && (
+                      <Button
+                        type="button"
+                        variant="link"
+                        size="sm"
+                        className="h-auto p-0 text-primary"
+                        onClick={clearFilters}
+                      >
+                        Clear filters
+                      </Button>
+                    )}
+                  </div>
+                ) : (
+                  <>
+                    {selectedRowIds.size > 0 && (
+                      <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/50 px-3 py-2">
+                        <span className="text-sm text-muted-foreground">
+                          {selectedRowIds.size} row{selectedRowIds.size !== 1 ? "s" : ""} selected
+                        </span>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setSelectedRowIds(new Set())}
+                        >
+                          Clear selection
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="sm"
+                          onClick={handleBulkDeleteClick}
+                          className="gap-2"
+                        >
+                          <Trash2 className="h-4 w-4" aria-hidden />
+                          Delete selected
+                        </Button>
+                      </div>
+                    )}
+                    <div className="w-full overflow-auto rounded-md border">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="w-10">
+                              <Checkbox
+                                checked={allOnPageSelected}
+                                onCheckedChange={(v) =>
+                                  handleSelectAllRows(v === true)
+                                }
+                                aria-label="Select all rows on this page"
+                              />
+                            </TableHead>
+                            {LEAD_ROW_TABLE_COLUMNS.map((col) => (
+                              <TableHead
+                                key={col.key}
+                                className={col.key === "rowIndex" ? "w-12" : undefined}
+                              >
+                                {col.key === "rowIndex" ? "%" : col.label}
+                              </TableHead>
+                            ))}
+                            <TableHead className="w-[100px] text-right">Actions</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {rows.map((row) => (
+                            <TableRow key={row.id}>
+                              <TableCell>
+                                <Checkbox
+                                  checked={selectedRowIds.has(row.id)}
+                                  onCheckedChange={(v) =>
+                                    handleSelectRow(row.id, v === true)
+                                  }
+                                  aria-label={`Select row ${row.rowIndex + 1}`}
+                                />
+                              </TableCell>
+                              {LEAD_ROW_TABLE_COLUMNS.map((col) => {
+                                const value = row[col.key as keyof LeadRow]
+                                const display =
+                                  col.key === "rowIndex" && typeof value === "number"
+                                    ? value + 1
+                                    : value ?? "—"
+                                const str = typeof display === "string" ? display : String(display)
+                                return (
+                                  <TableCell
+                                    key={col.key}
+                                    className={
+                                      col.key === "rowIndex"
+                                        ? "text-muted-foreground"
+                                        : "max-w-[200px] truncate"
+                                    }
+                                    title={typeof display === "string" ? display : undefined}
+                                  >
+                                    {str}
+                                  </TableCell>
+                                )
+                              })}
+                              <TableCell className="text-right">
+                                <div className="flex items-center justify-end gap-1">
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8"
+                                    onClick={() => handleEditClick(row)}
+                                    aria-label={`Edit row ${row.rowIndex + 1}`}
+                                  >
+                                    <Pencil className="h-4 w-4" aria-hidden />
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 text-destructive hover:text-destructive"
+                                    onClick={() => handleDeleteClick(row.id)}
+                                    aria-label={`Delete row ${row.rowIndex + 1}`}
+                                  >
+                                    <Trash2 className="h-4 w-4" aria-hidden />
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                    <Pagination
+                      currentPage={rowsPage}
+                      totalPages={rowsTotalPages}
+                      onPageChange={setRowsPage}
+                      totalItems={rowsTotal}
+                      pageSize={ROWS_PAGE_SIZE}
+                      itemLabel="row"
+                      filterNote={hasActiveFilters ? " (filtered)" : undefined}
+                    />
+                  </>
                 )}
               </>
             )}
             <div className="flex flex-wrap items-center gap-2 border-t pt-4">
               <Button
                 type="button"
-                variant="outline"
+                variant="default"
                 size="sm"
-                onClick={handleAddRows}
-                disabled={addingRows}
+                onClick={handleAddClick}
                 className="gap-2"
               >
-                {addingRows ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                    Adding...
-                  </>
-                ) : (
-                  <>
-                    <Plus className="h-4 w-4" aria-hidden />
-                    Add
-                  </>
-                )}
+                <Plus className="h-4 w-4" aria-hidden />
+                Add
               </Button>
-              <Input
-                type="number"
-                min={1}
-                max={100}
-                value={addRowsCount}
-                onChange={(e) => {
-                  const v = parseInt(e.target.value, 10)
-                  if (!Number.isNaN(v)) setAddRowsCount(v)
-                }}
-                className="w-16"
-                aria-label="Number of rows to add"
-              />
               <span className="text-sm text-muted-foreground">
-                more rows at the bottom
+                Add a new lead row
               </span>
             </div>
           </CardContent>
         </Card>
       </div>
+
+      <AlertDialog
+        open={deletingRowIds !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeletingRowIds(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete lead row(s)</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deletingRowIds?.length === 1
+                ? "Are you sure you want to delete this lead row? This cannot be undone."
+                : `Are you sure you want to delete these ${deletingRowIds?.length ?? 0} lead rows? This cannot be undone.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault()
+                void handleDeleteConfirm()
+              }}
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                  Deleting...
+                </>
+              ) : (
+                "Delete"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {id && (
+        <LeadRowFormSidebar
+          open={sidebarOpen}
+          onOpenChange={setSidebarOpen}
+          mode={sidebarMode}
+          row={editingRow}
+          leadFileId={id}
+          onSuccess={handleSidebarSuccess}
+        />
+      )}
+
+      <Toast open={toastOpen} onOpenChange={setToastOpen} variant="success">
+        <ToastTitle>{toastMessage}</ToastTitle>
+        <ToastDescription>
+          {toastMessage === "Row added"
+            ? "The new lead row has been added."
+            : "The lead row has been updated."}
+        </ToastDescription>
+      </Toast>
     </PageShell>
   )
 }

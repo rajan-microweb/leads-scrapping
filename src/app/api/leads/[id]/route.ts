@@ -15,29 +15,30 @@ export async function GET(
 
     const id = params?.id?.trim()
     if (!id) {
-      return NextResponse.json({ error: "Lead file id is required" }, { status: 400 })
+      return NextResponse.json({ error: "Lead sheet id is required" }, { status: 400 })
     }
 
-    const { data: leadFile, error } = await supabaseAdmin
-      .from("LeadFile")
+    const { data: leadSheet, error } = await supabaseAdmin
+      .from("LeadSheets")
       .select(`
         id,
-        fileName,
+        sheetName,
         uploadedAt,
+        sourceFileExtension,
         signature:signatures(name)
       `)
       .eq("id", id)
       .eq("userId", session.user.id)
       .single()
 
-    if (error || !leadFile) {
+    if (error || !leadSheet) {
       return NextResponse.json(
-        { error: "Lead file not found" },
+        { error: "Lead sheet not found" },
         { status: 404 }
       )
     }
 
-    const signature = (leadFile as { signature?: { name: string } | { name: string }[] | null }).signature
+    const signature = (leadSheet as { signature?: { name: string } | { name: string }[] | null }).signature
     const signatureName =
       Array.isArray(signature) && signature[0]
         ? signature[0].name
@@ -47,9 +48,10 @@ export async function GET(
 
     return NextResponse.json(
       {
-        id: leadFile.id,
-        fileName: leadFile.fileName,
-        uploadedAt: leadFile.uploadedAt,
+        id: leadSheet.id,
+        sheetName: leadSheet.sheetName,
+        uploadedAt: leadSheet.uploadedAt,
+        sourceFileExtension: leadSheet.sourceFileExtension ?? null,
         signatureName: signatureName ?? null,
       },
       { status: 200 }

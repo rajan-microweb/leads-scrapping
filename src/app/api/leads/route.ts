@@ -10,12 +10,13 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { data: leadFiles, error: fetchError } = await supabaseAdmin
-      .from('LeadFile')
+    const { data: leadSheets, error: fetchError } = await supabaseAdmin
+      .from('LeadSheets')
       .select(`
         id,
-        fileName,
+        sheetName,
         uploadedAt,
+        sourceFileExtension,
         signature:signatures(name)
       `)
       .eq('userId', session.user.id)
@@ -24,13 +25,13 @@ export async function GET() {
     if (fetchError) {
       console.error("leads GET fetchError:", fetchError)
       return NextResponse.json(
-        { error: "Failed to load lead files" },
+        { error: "Failed to load lead sheets" },
         { status: 500 }
       )
     }
 
-    const list = (leadFiles || []).map((file: any) => {
-      const sig = file.signature
+    const list = (leadSheets || []).map((sheet: any) => {
+      const sig = sheet.signature
       const signatureName =
         Array.isArray(sig) && sig[0]?.name != null
           ? sig[0].name
@@ -38,9 +39,10 @@ export async function GET() {
             ? (sig as { name: string }).name
             : null
       return {
-        id: file.id,
-        fileName: file.fileName,
-        uploadedAt: file.uploadedAt,
+        id: sheet.id,
+        sheetName: sheet.sheetName,
+        uploadedAt: sheet.uploadedAt,
+        sourceFileExtension: sheet.sourceFileExtension ?? null,
         signatureName: signatureName ?? null,
       }
     })
@@ -92,8 +94,8 @@ export async function DELETE(request: Request) {
       )
     }
 
-    const { data: leadFiles, error: fetchError } = await supabaseAdmin
-      .from("LeadFile")
+    const { data: leadSheets, error: fetchError } = await supabaseAdmin
+      .from("LeadSheets")
       .select("id, userId")
       .in("id", validIds)
       .eq("userId", session.user.id)
@@ -106,24 +108,24 @@ export async function DELETE(request: Request) {
       )
     }
 
-    if (!leadFiles || leadFiles.length === 0) {
+    if (!leadSheets || leadSheets.length === 0) {
       return NextResponse.json(
-        { error: "No lead files found or access denied" },
+        { error: "No lead sheets found or access denied" },
         { status: 404 }
       )
     }
 
-    const userLeadFileIds = leadFiles.map((f: { id: string }) => f.id)
+    const userLeadSheetIds = leadSheets.map((s: { id: string }) => s.id)
 
     await supabaseAdmin
-      .from("LeadRow")
+      .from("LeadsData")
       .delete()
-      .in("leadFileId", userLeadFileIds)
+      .in("leadFileId", userLeadSheetIds)
 
     const { error } = await supabaseAdmin
-      .from("LeadFile")
+      .from("LeadSheets")
       .delete()
-      .in("id", userLeadFileIds)
+      .in("id", userLeadSheetIds)
       .eq("userId", session.user.id)
 
     if (error) {
@@ -137,8 +139,8 @@ export async function DELETE(request: Request) {
     return NextResponse.json(
       {
         success: true,
-        deletedCount: userLeadFileIds.length,
-        message: `Successfully deleted ${userLeadFileIds.length} lead file(s)`,
+        deletedCount: userLeadSheetIds.length,
+        message: `Successfully deleted ${userLeadSheetIds.length} lead sheet(s)`,
       },
       { status: 200 }
     )

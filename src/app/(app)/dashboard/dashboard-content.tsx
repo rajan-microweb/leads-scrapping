@@ -41,7 +41,7 @@ type DashboardContentProps = {
   userName?: string | null
 }
 
-type LeadFile = { id: string; fileName: string; uploadedAt: string }
+type LeadSheet = { id: string; sheetName: string; uploadedAt: string }
 type Signature = { id: string; name: string; updatedAt: string; createdAt: string }
 type Integration = {
   id: string
@@ -59,7 +59,7 @@ export function DashboardContent({
   userRole,
   userName,
 }: DashboardContentProps) {
-  const [leads, setLeads] = useState<LeadFile[]>([])
+  const [leads, setLeads] = useState<LeadSheet[]>([])
   const [signatures, setSignatures] = useState<Signature[]>([])
   const [integrations, setIntegrations] = useState<Integration[]>([])
   const [loading, setLoading] = useState(true)
@@ -118,14 +118,14 @@ export function DashboardContent({
   const recentActivity: RecentActivityItem[] = useMemo(() => {
     const entries: { date: Date; item: RecentActivityItem }[] = []
 
-    leads.slice(0, 5).forEach((f) => {
+    leads.slice(0, 5).forEach((s) => {
       entries.push({
-        date: new Date(f.uploadedAt),
+        date: new Date(s.uploadedAt),
         item: {
           type: "lead",
-          label: `Lead file: ${f.fileName}`,
+          label: `Lead sheet: ${s.sheetName}`,
           href: "/leads",
-          date: new Date(f.uploadedAt),
+          date: new Date(s.uploadedAt),
         },
       })
     })

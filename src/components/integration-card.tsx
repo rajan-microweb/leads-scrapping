@@ -391,7 +391,7 @@ export function IntegrationCard({ name, platformName, description, Icon, onConne
         <Card className="border-border/70 transition-shadow duration-normal hover:shadow-dropdown overflow-hidden">
           <CardContent className="flex flex-col gap-4 py-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex min-w-0 flex-1 items-start gap-4">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-white border border-border overflow-hidden p-1.5">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-card border border-border overflow-hidden p-1.5">
                 {Icon ? (
                   <Icon className="h-5 w-5" aria-hidden="true" />
                 ) : platformName === "outlook" ? (

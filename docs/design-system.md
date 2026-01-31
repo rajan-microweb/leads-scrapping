@@ -8,6 +8,11 @@ This document describes the design tokens and patterns used across the admin pan
 - **Accent palette**: `--success`, `--warning`, `--info` (and `-foreground`) for status, alerts, and empty-state accents. Tailwind: `success`, `warning`, `info`.
 - **Gradients**: Optional for hero/empty states; keep subtle (e.g. `from-muted` to `background`).
 
+## Dark mode
+
+- **Toggle**: Theme is toggled from the admin header (light, dark, system). Preference is persisted in localStorage via `next-themes`.
+- **Tokens**: Light and dark values live in `globals.css` under `:root` and `.dark`. Use semantic tokens (`background`, `foreground`, `card`, `muted`, etc.) so UI responds automatically; avoid hardcoded light-only colors (e.g. `bg-white`).
+
 ## Typography
 
 Use these utility classes for consistency:
