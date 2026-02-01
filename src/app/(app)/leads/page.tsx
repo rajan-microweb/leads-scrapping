@@ -48,6 +48,10 @@ import { EmptyState } from "@/components/EmptyState"
 import { ErrorMessage } from "@/components/ErrorMessage"
 import { TableSkeleton } from "@/components/TableSkeleton"
 import { Pagination } from "@/components/ui/pagination"
+import {
+  MAPPABLE_IMPORT_FIELDS,
+  suggestMapping,
+} from "@/config/lead-import"
 
 type LeadSheet = {
   id: string
@@ -67,6 +71,10 @@ type Signature = {
 
 const ALLOWED_EXTENSIONS = [".xlsx", ".xls", ".csv"]
 const CREATE_NEW_SIGNATURE_VALUE = "__create_new_signature__"
+/** Sentinel for "Don't map" in column mapping Select (Radix Select disallows empty string value). */
+const DONT_MAP_VALUE = "__dont_map__"
+/** Prefix for empty column headers in Select (Radix disallows empty string value). */
+const EMPTY_HEADER_VALUE_PREFIX = "__empty_header_"
 
 type SortBy = "uploadedAt" | "sheetName" | "signatureName" | "type"
 type SortOrder = "asc" | "desc"
@@ -155,7 +163,10 @@ export default function LeadsPage() {
   const [isOutlookConnected, setIsOutlookConnected] = useState<boolean | null>(null)
   const [isCheckingOutlook, setIsCheckingOutlook] = useState(true)
   const [createLeadsDialogOpen, setCreateLeadsDialogOpen] = useState(false)
-  const [uploadStep, setUploadStep] = useState<1 | 2>(1)
+  const [uploadStep, setUploadStep] = useState<1 | 2 | 3>(1)
+  const [fileHeaders, setFileHeaders] = useState<string[]>([])
+  const [columnMapping, setColumnMapping] = useState<Record<string, string>>({})
+  const [parsingHeaders, setParsingHeaders] = useState(false)
   const [importOption, setImportOption] = useState<"new" | "add">("new")
   const [targetLeadSheetId, setTargetLeadSheetId] = useState("")
   const [existingTablesSearch, setExistingTablesSearch] = useState("")
@@ -543,6 +554,8 @@ export default function LeadsPage() {
           setCreateLeadsDialogOpen(open)
           if (!open) {
             setUploadStep(1)
+            setFileHeaders([])
+            setColumnMapping({})
             setImportOption("new")
             setTargetLeadSheetId("")
             setSheetNameInput("")
@@ -553,12 +566,18 @@ export default function LeadsPage() {
         <DialogContent>
             <DialogHeader>
               <DialogTitle>
-                {uploadStep === 1 ? "Create leads" : "Where to add data?"}
+                {uploadStep === 1
+                  ? "Create leads"
+                  : uploadStep === 2
+                    ? "Map your columns"
+                    : "Where to add data?"}
               </DialogTitle>
               <DialogDescription>
                 {uploadStep === 1
-                  ? "Choose a CSV or Excel file and optionally select an email signature. Then choose whether to create a new sheet or add to an existing one."
-                  : "Create a new lead sheet with this data, or append rows to an existing sheet."}
+                  ? "Choose a CSV or Excel file and optionally select an email signature."
+                  : uploadStep === 2
+                    ? "Map your file columns to our fields so we know where to find email and website."
+                    : "Create a new lead sheet with this data, or append rows to an existing sheet."}
               </DialogDescription>
             </DialogHeader>
 
@@ -591,7 +610,48 @@ export default function LeadsPage() {
                 }
 
                 if (uploadStep === 1) {
-                  setUploadStep(2)
+                  setParsingHeaders(true)
+                  setUploadError(null)
+                  try {
+                    const XLSX = await import("xlsx")
+                    const buffer = await selectedFile.arrayBuffer()
+                    const ext = selectedFile.name.toLowerCase().slice(selectedFile.name.lastIndexOf("."))
+                    const isCsv = ext === ".csv"
+                    let workbook: import("xlsx").WorkBook
+                    if (isCsv) {
+                      const str = new TextDecoder("utf-8").decode(buffer)
+                      workbook = XLSX.read(str, { type: "string", raw: true })
+                    } else {
+                      workbook = XLSX.read(new Uint8Array(buffer), { type: "array", raw: true })
+                    }
+                    const sheet = workbook.Sheets[workbook.SheetNames[0]]
+                    if (!sheet) {
+                      setUploadError("No sheet found in file. Please choose another file.")
+                      return
+                    }
+                    const rows = XLSX.utils.sheet_to_json(sheet, {
+                      header: 1,
+                      defval: "",
+                      raw: true,
+                    }) as (string | number)[][]
+                    const headers = (rows[0] ?? []).map((c) => String(c ?? "").trim())
+                    setFileHeaders(headers)
+                    setColumnMapping(suggestMapping(headers))
+                    setUploadStep(2)
+                  } catch (err) {
+                    setUploadError(
+                      err instanceof Error
+                        ? err.message
+                        : "Failed to read file. Please choose another file.",
+                    )
+                  } finally {
+                    setParsingHeaders(false)
+                  }
+                  return
+                }
+
+                if (uploadStep === 2) {
+                  setUploadStep(3)
                   return
                 }
 
@@ -623,6 +683,17 @@ export default function LeadsPage() {
                   if (selectedSignatureId && selectedSignatureId !== CREATE_NEW_SIGNATURE_VALUE) {
                     formData.append("signatureId", selectedSignatureId)
                   }
+                  const mapping: Record<string, string> = {}
+                  for (const field of MAPPABLE_IMPORT_FIELDS) {
+                    const v = columnMapping[field.key]
+                    const isUnmapped =
+                      v === DONT_MAP_VALUE ||
+                      v == null ||
+                      v === "" ||
+                      (typeof v === "string" && v.startsWith(EMPTY_HEADER_VALUE_PREFIX))
+                    mapping[field.key] = isUnmapped ? "" : v
+                  }
+                  formData.append("mapping", JSON.stringify(mapping))
 
                   const importRes = await fetch("/api/lead-files/import", {
                     method: "POST",
@@ -651,6 +722,8 @@ export default function LeadsPage() {
                   setSelectedSignatureId("")
                   setFileInputKey((k) => k + 1)
                   setUploadStep(1)
+                  setFileHeaders([])
+                  setColumnMapping({})
                   setImportOption("new")
                   setTargetLeadSheetId("")
                   setSheetNameInput("")
@@ -752,6 +825,59 @@ export default function LeadsPage() {
               )}
 
               {uploadStep === 2 && (
+                <>
+                  <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+                    {selectedFile?.name ?? "No file selected"}
+                  </div>
+                  {fileHeaders.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      No columns detected. You can still continue or go back to choose another file.
+                    </p>
+                  ) : (
+                    <div className="space-y-3">
+                      {MAPPABLE_IMPORT_FIELDS.map((field) => (
+                        <div key={field.key} className="space-y-2">
+                          <Label
+                            htmlFor={`map-${field.key}`}
+                            className="text-sm font-medium text-foreground"
+                          >
+                            {field.label}
+                          </Label>
+                          <Select
+                            value={columnMapping[field.key] || DONT_MAP_VALUE}
+                            onValueChange={(value) => {
+                              setColumnMapping((prev) => ({
+                                ...prev,
+                                [field.key]: value,
+                              }))
+                            }}
+                          >
+                            <SelectTrigger id={`map-${field.key}`} className="w-full">
+                              <SelectValue placeholder="Don&apos;t map" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value={DONT_MAP_VALUE}>Don&apos;t map</SelectItem>
+                              {fileHeaders.map((header, headerIndex) => {
+                                const isEmpty = header == null || header === ""
+                                const value = isEmpty
+                                  ? `${EMPTY_HEADER_VALUE_PREFIX}${headerIndex}`
+                                  : header
+                                return (
+                                  <SelectItem key={value} value={value}>
+                                    {isEmpty ? "(empty)" : header}
+                                  </SelectItem>
+                                )
+                              })}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+
+              {uploadStep === 3 && (
                 <>
                   <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
                     {selectedFile?.name ?? "No file selected"}
@@ -877,23 +1003,52 @@ export default function LeadsPage() {
                     type="button"
                     variant="outline"
                     onClick={() => setUploadStep(1)}
+                    disabled={parsingHeaders || uploading}
+                  >
+                    Back
+                  </Button>
+                )}
+                {uploadStep === 3 && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setUploadStep(2)}
                     disabled={uploading}
                   >
                     Back
                   </Button>
                 )}
-                <Button type="submit" disabled={uploading} className="gap-2">
-                  {uploading ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                      Importing...
-                    </>
-                  ) : uploadStep === 1 ? (
-                    "Continue"
-                  ) : (
-                    "Import"
-                  )}
-                </Button>
+                {uploadStep === 2 ? (
+                  <Button
+                    type="button"
+                    onClick={() => setUploadStep(3)}
+                    disabled={parsingHeaders || uploading}
+                  >
+                    Next
+                  </Button>
+                ) : (
+                  <Button
+                    type="submit"
+                    disabled={parsingHeaders || uploading}
+                    className="gap-2"
+                  >
+                    {uploading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                        Importing...
+                      </>
+                    ) : parsingHeaders ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                        Reading file...
+                      </>
+                    ) : uploadStep === 1 ? (
+                      "Continue"
+                    ) : (
+                      "Import"
+                    )}
+                  </Button>
+                )}
               </div>
             </form>
           </DialogContent>

@@ -3,35 +3,12 @@ import { auth } from "@/lib/auth"
 import { supabaseAdmin } from "@/lib/supabase-server"
 import { generateId } from "@/lib/cuid"
 import * as XLSX from "xlsx"
+import {
+  MAPPABLE_IMPORT_FIELDS,
+  findHeaderIndex as resolveHeaderIndex,
+} from "@/config/lead-import"
 
 const ALLOWED_EXTENSIONS = [".xlsx", ".xls", ".csv"]
-const BUSINESS_EMAIL_ALIASES = [
-  "Business Emails",
-  "Email",
-  "Business Email",
-  "business_email",
-  "business email",
-]
-const WEBSITE_URL_ALIASES = [
-  "Website URLs",
-  "Website",
-  "URL",
-  "Website URL",
-  "website_url",
-  "website url",
-]
-
-function findHeaderIndex(
-  headers: string[],
-  aliases: string[]
-): number {
-  const lower = headers.map((h) => (h ?? "").toString().trim().toLowerCase())
-  for (const alias of aliases) {
-    const idx = lower.indexOf(alias.toLowerCase())
-    if (idx !== -1) return idx
-  }
-  return -1
-}
 
 function parseFile(
   buffer: ArrayBuffer,
@@ -201,23 +178,24 @@ async function handleImport(request: Request): Promise<NextResponse> {
       )
     }
 
-  let businessEmailIdx: number
-  let websiteUrlIdx: number
+  let mapping: Record<string, string> = {}
   if (mappingRaw) {
     try {
-      const mapping = JSON.parse(mappingRaw) as Record<string, string>
-      businessEmailIdx = headers.indexOf(mapping.businessEmail ?? "")
-      websiteUrlIdx = headers.indexOf(mapping.websiteUrl ?? "")
-      if (businessEmailIdx === -1) businessEmailIdx = findHeaderIndex(headers, BUSINESS_EMAIL_ALIASES)
-      if (websiteUrlIdx === -1) websiteUrlIdx = findHeaderIndex(headers, WEBSITE_URL_ALIASES)
+      mapping = JSON.parse(mappingRaw) as Record<string, string>
     } catch {
-      businessEmailIdx = findHeaderIndex(headers, BUSINESS_EMAIL_ALIASES)
-      websiteUrlIdx = findHeaderIndex(headers, WEBSITE_URL_ALIASES)
+      // use empty mapping, fall back to aliases below
     }
-  } else {
-    businessEmailIdx = findHeaderIndex(headers, BUSINESS_EMAIL_ALIASES)
-    websiteUrlIdx = findHeaderIndex(headers, WEBSITE_URL_ALIASES)
   }
+  const columnIndices: Record<string, number> = {}
+  for (const field of MAPPABLE_IMPORT_FIELDS) {
+    columnIndices[field.key] = resolveHeaderIndex(
+      headers,
+      field.aliases,
+      mapping[field.key]
+    )
+  }
+  const businessEmailIdx = columnIndices.businessEmail ?? -1
+  const websiteUrlIdx = columnIndices.websiteUrl ?? -1
 
   let startIndex: number
   if (option === "new") {

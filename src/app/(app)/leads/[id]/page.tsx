@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react"
 import Link from "next/link"
 import { useParams } from "next/navigation"
-import { ArrowLeft, FileSpreadsheet, Loader2, Plus, Search, Trash2, Pencil } from "lucide-react"
+import { ArrowLeft, CheckCircle2, FileSpreadsheet, Loader2, Plus, Search, Trash2, Pencil, Play, XCircle } from "lucide-react"
 
 import {
   AlertDialog,
@@ -18,6 +18,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import {
   Select,
   SelectContent,
@@ -47,6 +48,7 @@ import { LeadRowFormSidebar, type LeadRow } from "@/components/leads/LeadRowForm
 import { PageShell } from "@/components/layout/PageShell"
 import { EmptyState } from "@/components/EmptyState"
 import { ErrorMessage } from "@/components/ErrorMessage"
+import { supabase } from "@/lib/supabase"
 
 type LeadSheet = {
   id: string
@@ -119,6 +121,11 @@ export default function LeadDetailPage() {
   const [isDeleting, setIsDeleting] = useState(false)
   const [toastOpen, setToastOpen] = useState(false)
   const [toastMessage, setToastMessage] = useState("")
+  const [selectedAction, setSelectedAction] = useState<string>("send_mail")
+  const [rowsToRun, setRowsToRun] = useState<string>("50")
+  const [isRunning, setIsRunning] = useState(false)
+  const [jobId, setJobId] = useState<string | null>(null)
+  const [runStatuses, setRunStatuses] = useState<Record<string, string>>({})
 
   const loadLeadSheet = useCallback(async () => {
     if (!id) {
@@ -215,6 +222,83 @@ export default function LeadDetailPage() {
   useEffect(() => {
     if (id && leadSheet) void loadRows()
   }, [id, leadSheet, loadRows])
+
+  // Supabase Realtime subscription for job status updates
+  useEffect(() => {
+    if (!jobId || !id) return
+
+    // Fetch initial state once
+    const fetchInitialStatus = async () => {
+      try {
+        const res = await fetch(
+          `/api/lead-files/${encodeURIComponent(id)}/run-status/${encodeURIComponent(jobId)}`
+        )
+        if (!res.ok) return
+        const data = (await res.json()) as { statuses: Record<string, string>; isComplete: boolean }
+        setRunStatuses((prev) => ({ ...prev, ...data.statuses }))
+        if (data.isComplete) {
+          setJobId(null)
+        }
+      } catch {
+        // Ignore initial fetch errors
+      }
+    }
+    void fetchInitialStatus()
+
+    // Subscribe to Realtime broadcast for this job
+    const channelName = `action-run:${jobId}`
+    const channel = supabase.channel(channelName)
+
+    channel
+      .on('broadcast', { event: 'status' }, (payload) => {
+        const data = payload.payload as { statuses: Record<string, string>; isComplete: boolean } | undefined
+        if (data?.statuses) {
+          setRunStatuses((prev) => ({ ...prev, ...data.statuses }))
+        }
+        if (data?.isComplete) {
+          setJobId(null)
+        }
+      })
+      .subscribe()
+
+    // Cleanup: unsubscribe when jobId changes or component unmounts
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [jobId, id])
+
+  const handleRunAction = async () => {
+    if (!id) return
+    const count = Math.max(1, Math.min(500, parseInt(rowsToRun, 10) || 50))
+    const useSelected = selectedRowIds.size > 0
+    const payload = useSelected
+      ? { action: selectedAction, rowIds: Array.from(selectedRowIds) }
+      : { action: selectedAction, rowCount: count }
+
+    setIsRunning(true)
+    setJobId(null)
+    setRunStatuses({})
+    try {
+      const res = await fetch(`/api/lead-files/${encodeURIComponent(id)}/run-action`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+      const data = await res.json().catch(() => null)
+      if (!res.ok) {
+        throw new Error(data?.error ?? "Failed to run action")
+      }
+      // Set initial statuses from run-action response (avoids extra fetch)
+      if (data.statuses) {
+        setRunStatuses(data.statuses)
+      }
+      setJobId(data.jobId ?? null)
+    } catch (err) {
+      setRowsError(err instanceof Error ? err.message : "Failed to run action")
+    } finally {
+      setIsRunning(false)
+    }
+  }
 
   const hasActiveFilters = Boolean(
     searchQuery.trim() ||
@@ -405,6 +489,65 @@ export default function LeadDetailPage() {
             </p>
           </CardHeader>
           <CardContent className="min-w-0 space-y-4">
+            {rowsTotal > 0 && (
+              <div className="flex flex-wrap items-center gap-3 rounded-md border bg-muted/30 px-4 py-3">
+                <span className="text-sm font-medium">Actions</span>
+                <Select value={selectedAction} onValueChange={setSelectedAction}>
+                  <SelectTrigger className="w-[160px]">
+                    <SelectValue placeholder="Select action" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="send_mail">Send mail</SelectItem>
+                  </SelectContent>
+                </Select>
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="rows-to-run" className="text-sm text-muted-foreground whitespace-nowrap">
+                    Rows to run
+                  </Label>
+                  <Input
+                    id="rows-to-run"
+                    type="number"
+                    min={1}
+                    max={500}
+                    value={rowsToRun}
+                    onChange={(e) => setRowsToRun(e.target.value)}
+                    className="w-20"
+                    disabled={selectedRowIds.size > 0}
+                  />
+                </div>
+                {selectedRowIds.size > 0 && (
+                  <span className="text-xs text-muted-foreground">
+                    ({selectedRowIds.size} selected — will use selection)
+                  </span>
+                )}
+                <Button
+                  size="sm"
+                  onClick={() => void handleRunAction()}
+                  disabled={isRunning || rowsTotal === 0}
+                  className="gap-2"
+                >
+                  {isRunning ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                      Running...
+                    </>
+                  ) : (
+                    <>
+                      <Play className="h-4 w-4" aria-hidden />
+                      Run
+                    </>
+                  )}
+                </Button>
+              </div>
+            )}
+            {jobId && (
+              <div
+                role="status"
+                className="rounded-md border border-primary/30 bg-primary/5 px-4 py-2 text-sm text-foreground"
+              >
+                Running Send mail... Status updates below.
+              </div>
+            )}
             {rowsError && (
               <ErrorMessage
                 message={rowsError}
@@ -545,6 +688,7 @@ export default function LeadDetailPage() {
                                 {col.key === "rowIndex" ? "%" : col.label}
                               </TableHead>
                             ))}
+                            <TableHead className="w-[120px]">Status</TableHead>
                             <TableHead className="w-[100px] text-right">Actions</TableHead>
                           </TableRow>
                         </TableHeader>
@@ -581,6 +725,29 @@ export default function LeadDetailPage() {
                                   </TableCell>
                                 )
                               })}
+                              <TableCell>
+                                {jobId && runStatuses[row.id] === "completed" && (
+                                  <span className="inline-flex items-center gap-1.5 text-success">
+                                    <CheckCircle2 className="h-4 w-4" aria-hidden />
+                                    Completed
+                                  </span>
+                                )}
+                                {jobId && runStatuses[row.id] === "failed" && (
+                                  <span className="inline-flex items-center gap-1.5 text-destructive">
+                                    <XCircle className="h-4 w-4" aria-hidden />
+                                    Failed
+                                  </span>
+                                )}
+                                {jobId && runStatuses[row.id] === "pending" && (
+                                  <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+                                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                                    Pending
+                                  </span>
+                                )}
+                                {(!jobId || (jobId && !["pending", "completed", "failed"].includes(runStatuses[row.id] ?? ""))) && (
+                                  <span className="text-muted-foreground">—</span>
+                                )}
+                              </TableCell>
                               <TableCell className="text-right">
                                 <div className="flex items-center justify-end gap-1">
                                   <Button
