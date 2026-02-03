@@ -42,10 +42,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "User not found" }, { status: 404 })
     }
 
-    const storedPasswordHash =
-      typeof (user as Record<string, unknown>).password === "string"
-        ? (user as Record<string, unknown>).password
-        : null
+    const rawPassword = (user as Record<string, unknown>).password
+    const storedPasswordHash: string | null =
+      typeof rawPassword === "string" ? rawPassword : null
 
     if (!storedPasswordHash || storedPasswordHash.length === 0) {
       return NextResponse.json(
