@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { supabaseAdmin } from "@/lib/supabase-server"
-import { generateId } from "@/lib/cuid"
+
+const N8N_SEND_MAIL_WEBHOOK_URL = "https://n8n.srv1248804.hstgr.cloud/webhook/send-mail"
 
 type RouteContext = { params: { id: string } }
 
@@ -58,112 +59,48 @@ export async function POST(
       )
     }
 
-    let rowIds: string[] = []
+    let rowCount: number
     if (Array.isArray(body.rowIds) && body.rowIds.length > 0) {
-      rowIds = body.rowIds.filter((x: unknown) => typeof x === "string").slice(0, 500)
+      rowCount = Math.min(500, body.rowIds.filter((x: unknown) => typeof x === "string").length)
     } else if (typeof body.rowCount === "number" && body.rowCount > 0) {
-      const count = Math.min(500, Math.floor(body.rowCount))
-      const { data: rows } = await supabaseAdmin
-        .from("LeadsData")
-        .select("id")
-        .eq("leadFileId", id)
-        .order("rowIndex", { ascending: true })
-        .limit(count)
-      rowIds = (rows ?? []).map((r) => r.id)
-    }
-
-    if (rowIds.length === 0) {
+      rowCount = Math.min(500, Math.floor(body.rowCount))
+    } else {
       return NextResponse.json(
         { error: "Provide rowIds or rowCount to specify which rows to run" },
         { status: 400 }
       )
     }
 
-    const { data: rows, error: rowsError } = await supabaseAdmin
-      .from("LeadsData")
-      .select("id, businessEmail, websiteUrl")
-      .eq("leadFileId", id)
-      .in("id", rowIds)
-      .order("rowIndex", { ascending: true })
-
-    if (rowsError || !rows || rows.length === 0) {
-      return NextResponse.json(
-        { error: "No matching rows found" },
-        { status: 400 }
-      )
+    let signatureDetails: { id: string | null; name: string | null; content: string } = {
+      id: null,
+      name: null,
+      content: "",
     }
-
-    let signatureContent = ""
     if (sheet.signatureId) {
       const { data: sig } = await supabaseAdmin
         .from("signatures")
-        .select("content")
+        .select("id, name, content")
         .eq("id", sheet.signatureId)
         .eq("userId", session.user.id)
         .single()
-      if (sig?.content) {
-        signatureContent = typeof sig.content === "string" ? sig.content : ""
+      if (sig) {
+        signatureDetails = {
+          id: sig.id ?? null,
+          name: typeof sig.name === "string" ? sig.name : null,
+          content: typeof sig.content === "string" ? sig.content : "",
+        }
       }
     }
 
-    const callbackToken = generateId()
-    const statuses: Record<string, string> = {}
-    for (const r of rows) {
-      statuses[r.id] = "pending"
-    }
-
-    const { data: actionRun, error: insertError } = await supabaseAdmin
-      .from("ActionRuns")
-      .insert({
-        id: generateId(),
-        leadFileId: id,
-        userId: session.user.id,
-        action,
-        rowIds: rows.map((r) => r.id),
-        statuses,
-        callbackToken,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      })
-      .select("id")
-      .single()
-
-    if (insertError) {
-      console.error("run-action ActionRuns insert error:", insertError)
-      return NextResponse.json(
-        { error: "Failed to create action run" },
-        { status: 500 }
-      )
-    }
-
-    const appUrl = process.env.APP_URL ?? process.env.AUTH_URL ?? "http://localhost:3000"
-    const callbackUrl = `${appUrl.replace(/\/$/, "")}/api/n8n-callback?token=${callbackToken}`
-
-    const n8nWebhookUrl = process.env.N8N_LEADS_WEBHOOK_URL
-    if (!n8nWebhookUrl) {
-      console.error("N8N_LEADS_WEBHOOK_URL is not configured")
-      return NextResponse.json(
-        { error: "n8n webhook is not configured" },
-        { status: 500 }
-      )
-    }
-
-    const leadsPayload = rows.map((r) => ({
-      row_id: r.id,
-      "Business Emails": r.businessEmail ?? "",
-      "Website URL": r.websiteUrl ?? "",
-    }))
-
     const n8nPayload = {
       userId: session.user.id,
-      callbackUrl,
-      callbackToken,
-      signatureContent,
-      leads: leadsPayload,
+      leadSheetId: id,
+      rowCount,
+      signature: signatureDetails,
     }
 
     try {
-      const n8nRes = await fetch(n8nWebhookUrl, {
+      const n8nRes = await fetch(N8N_SEND_MAIL_WEBHOOK_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(n8nPayload),
@@ -185,7 +122,7 @@ export async function POST(
     }
 
     return NextResponse.json(
-      { jobId: actionRun?.id, statuses },
+      { ok: true },
       { status: 201 }
     )
   } catch (error) {

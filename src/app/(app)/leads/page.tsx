@@ -613,28 +613,24 @@ export default function LeadsPage() {
                   setParsingHeaders(true)
                   setUploadError(null)
                   try {
-                    const XLSX = await import("xlsx")
-                    const buffer = await selectedFile.arrayBuffer()
-                    const ext = selectedFile.name.toLowerCase().slice(selectedFile.name.lastIndexOf("."))
-                    const isCsv = ext === ".csv"
-                    let workbook: import("xlsx").WorkBook
-                    if (isCsv) {
-                      const str = new TextDecoder("utf-8").decode(buffer)
-                      workbook = XLSX.read(str, { type: "string", raw: true })
-                    } else {
-                      workbook = XLSX.read(new Uint8Array(buffer), { type: "array", raw: true })
-                    }
-                    const sheet = workbook.Sheets[workbook.SheetNames[0]]
-                    if (!sheet) {
-                      setUploadError("No sheet found in file. Please choose another file.")
+                    const formData = new FormData()
+                    formData.append("file", selectedFile)
+                    const parseRes = await fetch("/api/lead-files/parse-headers", {
+                      method: "POST",
+                      body: formData,
+                    })
+                    const parseData = await parseRes.json().catch(() => null)
+                    if (!parseRes.ok) {
+                      setUploadError(
+                        (parseData && typeof parseData.error === "string")
+                          ? parseData.error
+                          : "Failed to read file. Please choose another file.",
+                      )
                       return
                     }
-                    const rows = XLSX.utils.sheet_to_json(sheet, {
-                      header: 1,
-                      defval: "",
-                      raw: true,
-                    }) as (string | number)[][]
-                    const headers = (rows[0] ?? []).map((c) => String(c ?? "").trim())
+                    const headers = Array.isArray(parseData?.headers)
+                      ? parseData.headers
+                      : []
                     setFileHeaders(headers)
                     setColumnMapping(suggestMapping(headers))
                     setUploadStep(2)

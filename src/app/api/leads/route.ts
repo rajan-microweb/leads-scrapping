@@ -120,7 +120,7 @@ export async function DELETE(request: Request) {
     await supabaseAdmin
       .from("LeadsData")
       .delete()
-      .in("leadFileId", userLeadSheetIds)
+      .in("leadSheetId", userLeadSheetIds)
 
     const { error } = await supabaseAdmin
       .from("LeadSheets")

@@ -75,7 +75,7 @@ export async function PATCH(
       .from("LeadsData")
       .update(updates)
       .eq("id", rowId)
-      .eq("leadFileId", id)
+      .eq("leadSheetId", id)
       .select("id, rowIndex, businessEmail, websiteUrl")
       .single()
 

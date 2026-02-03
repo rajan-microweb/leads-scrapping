@@ -62,6 +62,17 @@ export async function POST(request: Request) {
       )
     }
 
+    // Keep LeadsData.emailStatus in sync when n8n reports completed/failed
+    const { error: leadsUpdateError } = await supabaseAdmin
+      .from("LeadsData")
+      .update({ emailStatus: status === "completed" ? "Completed" : "Failed" })
+      .eq("id", rowId)
+
+    if (leadsUpdateError) {
+      console.error("n8n-callback LeadsData update error:", leadsUpdateError)
+      // Don't fail the request - ActionRuns was updated successfully
+    }
+
     return NextResponse.json({ ok: true }, { status: 200 })
   } catch (error) {
     console.error("n8n-callback error:", error)

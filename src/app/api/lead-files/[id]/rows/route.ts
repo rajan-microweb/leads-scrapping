@@ -71,10 +71,10 @@ export async function GET(
 
     let query = supabaseAdmin
       .from("LeadsData")
-      .select("id, rowIndex, businessEmail, websiteUrl, sheetName", {
+      .select("id, rowIndex, businessEmail, websiteUrl, sheetName, emailStatus", {
         count: "exact",
       })
-      .eq("leadFileId", id)
+      .eq("leadSheetId", id)
 
     if (searchTerm) {
       query = query.or(
@@ -178,7 +178,7 @@ export async function POST(
     const { data: maxRow } = await supabaseAdmin
       .from("LeadsData")
       .select("rowIndex")
-      .eq("leadFileId", id)
+      .eq("leadSheetId", id)
       .order("rowIndex", { ascending: false })
       .limit(1)
       .single()
@@ -187,7 +187,7 @@ export async function POST(
     let nextIndex = (maxRow?.rowIndex ?? -1) + 1
     const toInsert = items.map((item) => ({
       id: generateId(),
-      leadFileId: id,
+      leadSheetId: id,
       sheetName,
       rowIndex: nextIndex++,
       businessEmail:
@@ -198,12 +198,13 @@ export async function POST(
         typeof item.websiteUrl === "string"
           ? item.websiteUrl.trim() || null
           : null,
+      emailStatus: "Pending",
     }))
 
     const { data: inserted, error: insertError } = await supabaseAdmin
       .from("LeadsData")
       .insert(toInsert)
-      .select("id, rowIndex, businessEmail, websiteUrl, sheetName")
+      .select("id, rowIndex, businessEmail, websiteUrl, sheetName, emailStatus")
 
     if (insertError) {
       console.error("lead-files/[id]/rows POST error:", insertError)
@@ -268,7 +269,7 @@ export async function DELETE(
     const { data: existingRows, error: fetchError } = await supabaseAdmin
       .from("LeadsData")
       .select("id")
-      .eq("leadFileId", id)
+      .eq("leadSheetId", id)
       .in("id", uniqueIds)
 
     if (fetchError) {
@@ -288,7 +289,7 @@ export async function DELETE(
       .from("LeadsData")
       .delete()
       .in("id", idsToDelete)
-      .eq("leadFileId", id)
+      .eq("leadSheetId", id)
 
     if (deleteError) {
       console.error("lead-files/[id]/rows DELETE error:", deleteError)
@@ -296,6 +297,33 @@ export async function DELETE(
         { error: "Failed to delete rows" },
         { status: 500 }
       )
+    }
+
+    // Re-sequence rowIndex (0, 1, 2, ...) for remaining rows
+    const { data: remaining, error: fetchRemainingError } = await supabaseAdmin
+      .from("LeadsData")
+      .select("id")
+      .eq("leadSheetId", id)
+      .order("rowIndex", { ascending: true })
+
+    if (!fetchRemainingError && remaining && remaining.length > 0) {
+      const updateResults = await Promise.all(
+        remaining.map((row, index) =>
+          supabaseAdmin
+            .from("LeadsData")
+            .update({ rowIndex: index })
+            .eq("id", row.id)
+            .eq("leadSheetId", id)
+        )
+      )
+      const reindexError = updateResults.find((r) => r.error)
+      if (reindexError?.error) {
+        console.error("lead-files/[id]/rows DELETE reindex error:", reindexError.error)
+        return NextResponse.json(
+          { error: "Rows deleted but failed to re-sequence row numbers" },
+          { status: 500 }
+        )
+      }
     }
 
     return NextResponse.json(

@@ -21,6 +21,7 @@ export type LeadRow = {
   rowIndex: number
   businessEmail: string | null
   websiteUrl: string | null
+  emailStatus?: string | null
 }
 
 type LeadRowFormSidebarProps = {

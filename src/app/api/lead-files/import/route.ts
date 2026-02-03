@@ -204,7 +204,7 @@ async function handleImport(request: Request): Promise<NextResponse> {
     const { data: maxRow } = await supabaseAdmin
       .from("LeadsData")
       .select("rowIndex")
-      .eq("leadFileId", leadSheetId)
+      .eq("leadSheetId", leadSheetId)
       .order("rowIndex", { ascending: false })
       .limit(1)
       .single()
@@ -224,7 +224,7 @@ async function handleImport(request: Request): Promise<NextResponse> {
     sheetNameForRows = existingSheet?.sheetName ?? ""
   }
 
-  const toInsert: { id: string; leadFileId: string; sheetName: string; rowIndex: number; businessEmail: string | null; websiteUrl: string | null }[] = []
+  const toInsert: { id: string; leadSheetId: string; sheetName: string; rowIndex: number; businessEmail: string | null; websiteUrl: string | null; emailStatus: string }[] = []
   for (let i = 0; i < dataRows.length; i++) {
     const row = dataRows[i] ?? []
     const businessEmail =
@@ -237,11 +237,12 @@ async function handleImport(request: Request): Promise<NextResponse> {
         : null
     toInsert.push({
       id: generateId(),
-      leadFileId: leadSheetId,
+      leadSheetId: leadSheetId,
       sheetName: sheetNameForRows,
       rowIndex: startIndex + i,
       businessEmail,
       websiteUrl,
+      emailStatus: "Pending",
     })
   }
 

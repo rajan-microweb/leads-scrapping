@@ -4,8 +4,10 @@ import { useMemo, useState, useRef } from "react"
 import { useForm } from "react-hook-form"
 import { z } from "zod"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { Loader2 } from "lucide-react"
+import { AlertCircle, Loader2, Lock } from "lucide-react"
+import { signOutAction } from "@/actions/auth"
 import { Button } from "@/components/ui/button"
+import { Toast, ToastDescription, ToastTitle } from "@/components/ui/toast"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -79,6 +81,15 @@ export function ProfileForm({
   const [cropperOpen, setCropperOpen] = useState(false)
   const [cropperImageSrc, setCropperImageSrc] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Change password (separate from main form)
+  const [currentPassword, setCurrentPassword] = useState("")
+  const [newPassword, setNewPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
+  const [passwordError, setPasswordError] = useState<string | null>(null)
+  const [isChangingPassword, setIsChangingPassword] = useState(false)
+  const [passwordToastOpen, setPasswordToastOpen] = useState(false)
+  const [passwordToastMessage, setPasswordToastMessage] = useState("")
 
   const defaultIndustryExpertise = useMemo(() => {
     const v = initialCompanyIntelligence?.industry_expertise
@@ -338,6 +349,53 @@ export function ProfileForm({
 
   const onSubmitHandler = handleSubmit(onSubmit)
 
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setPasswordError(null)
+
+    if (newPassword.length < 6) {
+      setPasswordError("New password must be at least 6 characters")
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError("New password and confirmation do not match")
+      return
+    }
+    if (!currentPassword.trim()) {
+      setPasswordError("Current password is required")
+      return
+    }
+
+    setIsChangingPassword(true)
+    try {
+      const res = await fetch("/api/profile/change-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          currentPassword: currentPassword.trim(),
+          newPassword,
+        }),
+      })
+      const json = await res.json()
+      if (!res.ok) {
+        throw new Error(json?.error ?? "Failed to change password")
+      }
+      setCurrentPassword("")
+      setNewPassword("")
+      setConfirmPassword("")
+      setPasswordToastMessage("Password updated successfully. Signing you out…")
+      setPasswordToastOpen(true)
+      // Sign out after a short delay so user sees the success toast
+      setTimeout(() => {
+        void signOutAction()
+      }, 1500)
+    } catch (e) {
+      setPasswordError(e instanceof Error ? e.message : "Failed to change password")
+    } finally {
+      setIsChangingPassword(false)
+    }
+  }
+
   return (
     <PageShell
       title="Profile"
@@ -345,7 +403,8 @@ export function ProfileForm({
       maxWidth="default"
       className="space-y-8"
     >
-    <form onSubmit={onSubmitHandler} className="space-y-8">
+    <div className="space-y-8">
+      <form onSubmit={onSubmitHandler} className="space-y-8">
       {/* Section 0: Personal Information */}
       <Card>
         <CardHeader>
@@ -598,6 +657,124 @@ export function ProfileForm({
         />
       )}
     </form>
+
+      {/* Change password - separate form to avoid nested <form> (hydration error) */}
+      <Card className="overflow-hidden">
+        <CardHeader className="bg-muted/30 border-b">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <Lock className="h-5 w-5" aria-hidden />
+            </div>
+            <div className="space-y-1">
+              <CardTitle className="type-card-title text-base sm:text-lg">Change password</CardTitle>
+              <CardDescription className="text-xs sm:text-sm">
+                Confirm your current password and set a new one. You’ll be signed out and must sign in again with the new password.
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="p-6">
+          <form onSubmit={handleChangePassword} className="space-y-6 max-w-md">
+            {passwordError && (
+              <div
+                role="alert"
+                className="flex items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive"
+              >
+                <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" aria-hidden />
+                <span>{passwordError}</span>
+              </div>
+            )}
+
+            <div className="space-y-4 rounded-lg border bg-muted/20 p-4 sm:p-5">
+              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                Current password
+              </p>
+              <div className="space-y-2">
+                <Label htmlFor="currentPassword" className="text-sm font-medium">
+                  Enter your current password
+                </Label>
+                <Input
+                  id="currentPassword"
+                  type="password"
+                  autoComplete="current-password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  disabled={isChangingPassword}
+                  placeholder="••••••••"
+                  className="h-10"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-4 rounded-lg border bg-muted/20 p-4 sm:p-5">
+              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                New password
+              </p>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="newPassword" className="text-sm font-medium">
+                    New password
+                  </Label>
+                  <Input
+                    id="newPassword"
+                    type="password"
+                    autoComplete="new-password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    disabled={isChangingPassword}
+                    placeholder="Min 6 characters"
+                    className="h-10"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="confirmPassword" className="text-sm font-medium">
+                    Confirm new password
+                  </Label>
+                  <Input
+                    id="confirmPassword"
+                    type="password"
+                    autoComplete="new-password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    disabled={isChangingPassword}
+                    placeholder="••••••••"
+                    className="h-10"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3 pt-2">
+              <Button
+                type="submit"
+                disabled={isChangingPassword}
+                className="gap-2 min-w-[140px]"
+              >
+                {isChangingPassword ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                    Updating...
+                  </>
+                ) : (
+                  <>
+                    <Lock className="h-4 w-4" aria-hidden />
+                    Update password
+                  </>
+                )}
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                You’ll be signed out after updating. Sign in again with your new password.
+              </p>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+
+      <Toast open={passwordToastOpen} onOpenChange={setPasswordToastOpen} variant="success">
+        <ToastTitle>Password updated</ToastTitle>
+        <ToastDescription>{passwordToastMessage}</ToastDescription>
+      </Toast>
+    </div>
     </PageShell>
   )
 }
