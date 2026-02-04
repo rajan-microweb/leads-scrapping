@@ -6,7 +6,11 @@
  * 2. Extend the LeadRow type (in LeadRowFormSidebar) and the API GET/POST/PATCH/DELETE to include the new column.
  * 3. Table, sort, filter, and sidebar form will pick it up from this config.
  */
-export type LeadRowFieldKey = "rowIndex" | "businessEmail" | "websiteUrl"
+export type LeadRowFieldKey =
+  | "rowIndex"
+  | "businessEmail"
+  | "websiteUrl"
+  | "hasReplied"
 
 export interface LeadRowFieldConfig {
   key: LeadRowFieldKey
@@ -46,6 +50,14 @@ export const LEAD_ROW_FIELDS: LeadRowFieldConfig[] = [
     filterable: true,
     formField: true,
     formInputType: "url",
+  },
+  {
+    key: "hasReplied",
+    label: "Has replied",
+    searchable: false,
+    sortable: false,
+    filterable: false,
+    formField: false,
   },
 ]
 

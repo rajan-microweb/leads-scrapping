@@ -71,9 +71,12 @@ export async function GET(
 
     let query = supabaseAdmin
       .from("LeadsData")
-      .select("id, rowIndex, businessEmail, websiteUrl, sheetName, emailStatus", {
-        count: "exact",
-      })
+      .select(
+        "id, rowIndex, businessEmail, websiteUrl, sheetName, emailStatus, hasReplied",
+        {
+          count: "exact",
+        }
+      )
       .eq("leadSheetId", id)
 
     if (searchTerm) {
@@ -188,6 +191,7 @@ export async function POST(
     const toInsert = items.map((item) => ({
       id: generateId(),
       leadSheetId: id,
+      userId: session.user.id,
       sheetName,
       rowIndex: nextIndex++,
       businessEmail:
@@ -199,12 +203,15 @@ export async function POST(
           ? item.websiteUrl.trim() || null
           : null,
       emailStatus: "Pending",
+      hasReplied: null,
     }))
 
     const { data: inserted, error: insertError } = await supabaseAdmin
       .from("LeadsData")
       .insert(toInsert)
-      .select("id, rowIndex, businessEmail, websiteUrl, sheetName, emailStatus")
+      .select(
+        "id, rowIndex, businessEmail, websiteUrl, sheetName, emailStatus, hasReplied"
+      )
 
     if (insertError) {
       console.error("lead-files/[id]/rows POST error:", insertError)

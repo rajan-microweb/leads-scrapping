@@ -7,6 +7,11 @@ import {
   MAPPABLE_IMPORT_FIELDS,
   findHeaderIndex as resolveHeaderIndex,
 } from "@/config/lead-import"
+import {
+  classifyLeadRow,
+  emptyRejectedByReason,
+  type RejectReason,
+} from "@/lib/lead-import-filters"
 
 const ALLOWED_EXTENSIONS = [".xlsx", ".xls", ".csv"]
 
@@ -224,7 +229,19 @@ async function handleImport(request: Request): Promise<NextResponse> {
     sheetNameForRows = existingSheet?.sheetName ?? ""
   }
 
-  const toInsert: { id: string; leadSheetId: string; sheetName: string; rowIndex: number; businessEmail: string | null; websiteUrl: string | null; emailStatus: string }[] = []
+  const rejectedByReason = emptyRejectedByReason()
+  const toInsert: {
+    id: string
+    leadSheetId: string
+    userId: string
+    sheetName: string
+    rowIndex: number
+    businessEmail: string | null
+    websiteUrl: string | null
+    emailStatus: string
+    hasReplied: "YES" | "NO" | null
+  }[] = []
+  let eligibleIndex = 0
   for (let i = 0; i < dataRows.length; i++) {
     const row = dataRows[i] ?? []
     const businessEmail =
@@ -235,15 +252,23 @@ async function handleImport(request: Request): Promise<NextResponse> {
       websiteUrlIdx >= 0 && row[websiteUrlIdx] != null
         ? String(row[websiteUrlIdx]).trim() || null
         : null
-    toInsert.push({
-      id: generateId(),
-      leadSheetId: leadSheetId,
-      sheetName: sheetNameForRows,
-      rowIndex: startIndex + i,
-      businessEmail,
-      websiteUrl,
-      emailStatus: "Pending",
-    })
+    const { eligible, reason } = classifyLeadRow({ businessEmail, websiteUrl })
+    if (eligible) {
+      toInsert.push({
+        id: generateId(),
+        leadSheetId: leadSheetId,
+        userId: session.user.id,
+        sheetName: sheetNameForRows,
+        rowIndex: startIndex + eligibleIndex,
+        businessEmail,
+        websiteUrl,
+        emailStatus: "Pending",
+        hasReplied: null,
+      })
+      eligibleIndex++
+    } else if (reason) {
+      rejectedByReason[reason as RejectReason]++
+    }
   }
 
   const CHUNK = 100
@@ -264,11 +289,16 @@ async function handleImport(request: Request): Promise<NextResponse> {
   const sheetName = option === "new"
     ? (sheetNameRaw && typeof sheetNameRaw === "string" ? sheetNameRaw.trim() : "")
     : null
+  const totalRows = dataRows.length
+  const rejected = totalRows - toInsert.length
 
   const responseBody = {
     id: leadSheetId,
     sheetName: sheetName ?? undefined,
     rowCount: toInsert.length,
+    totalRows,
+    rejected,
+    rejectedByReason,
   }
   return NextResponse.json(responseBody, { status: 201 })
 }

@@ -17,6 +17,8 @@ function jsonResponse(
       businessEmail: string | null
       websiteUrl: string | null
       emailStatus: string
+      hasReplied: "YES" | "NO" | null
+      metadata?: unknown
     }
   },
   status: number
@@ -81,10 +83,20 @@ serve(async (req) => {
       return jsonResponse({ success: false, error: "Invalid JSON in request body" }, 400)
     }
 
-    const leadId = typeof body.leadId === "string" ? body.leadId.trim() : ""
-    if (!leadId) {
+    const leadId =
+      typeof body.leadId === "string" && body.leadId.trim() !== "" ? body.leadId.trim() : ""
+    const conversationId =
+      typeof body.conversationId === "string" && body.conversationId.trim() !== ""
+        ? body.conversationId.trim()
+        : ""
+
+    if (!leadId && !conversationId) {
       return jsonResponse(
-        { success: false, error: "leadId is required and must be a non-empty string" },
+        {
+          success: false,
+          error: "At least one identifier is required",
+          hint: "Provide leadId or conversationId (non-empty string).",
+        },
         400
       )
     }
@@ -121,11 +133,49 @@ serve(async (req) => {
       const status = String(body.emailStatus).trim()
       if (!status) {
         return jsonResponse(
-          { success: false, error: "emailStatus must be a non-empty string when provided" },
+          {
+            success: false,
+            error: "emailStatus must be a non-empty string when provided",
+          },
           400
         )
       }
       payload.emailStatus = status
+    }
+
+    if (body.hasReplied !== undefined) {
+      if (typeof body.hasReplied !== "string") {
+        return jsonResponse(
+          { success: false, error: "hasReplied must be a string when provided" },
+          400
+        )
+      }
+      const hr = String(body.hasReplied).trim().toUpperCase()
+      if (hr !== "YES" && hr !== "NO") {
+        return jsonResponse(
+          {
+            success: false,
+            error: "hasReplied must be either 'YES' or 'NO' when provided",
+          },
+          400
+        )
+      }
+      payload.hasReplied = hr
+    }
+
+    // metadata: arbitrary JSON object (stored as JSONB)
+    // - null clears metadata
+    // - object shallow-merges into existing metadata
+    if (body.metadata !== undefined) {
+      if (
+        body.metadata !== null &&
+        (typeof body.metadata !== "object" || Array.isArray(body.metadata))
+      ) {
+        return jsonResponse(
+          { success: false, error: "metadata must be a JSON object or null when provided" },
+          400
+        )
+      }
     }
 
     if (Object.keys(payload).length === 0) {
@@ -133,7 +183,7 @@ serve(async (req) => {
         {
           success: false,
           error: "At least one updatable field is required",
-          hint: "Provide one or more of: businessEmail, websiteUrl, emailStatus",
+          hint: "Provide one or more of: businessEmail, websiteUrl, emailStatus, metadata",
         },
         400
       )
@@ -143,21 +193,50 @@ serve(async (req) => {
       auth: { autoRefreshToken: false, persistSession: false },
     })
 
-    const { data: existing, error: existErr } = await supabase
-      .from("LeadsData")
-      .select("id")
-      .eq("id", leadId)
-      .single()
+    let existingQuery = supabase.from("LeadsData").select("id, metadata")
+
+    if (leadId) {
+      existingQuery = existingQuery.eq("id", leadId)
+    } else {
+      // Match conversationId inside the JSON structure of metadata as metadata->>'conversation_id'
+      existingQuery = existingQuery.filter("metadata->>conversation_id", "eq", conversationId)
+    }
+
+    const { data: existing, error: existErr } = await existingQuery.single()
 
     if (existErr || !existing) {
       return jsonResponse({ success: false, error: "Lead not found" }, 404)
     }
 
-    const { data: updated, error: updateErr } = await supabase
-      .from("LeadsData")
-      .update(payload)
-      .eq("id", leadId)
-      .select("id, rowIndex, businessEmail, websiteUrl, emailStatus")
+    if (body.metadata !== undefined) {
+      if (body.metadata === null) {
+        payload.metadata = null
+      } else {
+        const existingMetadata =
+          existing && typeof (existing as Record<string, unknown>).metadata === "object" &&
+          (existing as Record<string, unknown>).metadata !== null &&
+          !Array.isArray((existing as Record<string, unknown>).metadata)
+            ? ((existing as Record<string, unknown>).metadata as Record<string, unknown>)
+            : {}
+
+        payload.metadata = {
+          ...existingMetadata,
+          ...(body.metadata as Record<string, unknown>),
+        }
+      }
+    }
+
+    let updateQuery = supabase.from("LeadsData").update(payload)
+
+    if (leadId) {
+      updateQuery = updateQuery.eq("id", leadId)
+    } else {
+      // Match conversationId inside metadata JSON, same as for the existence check
+      updateQuery = updateQuery.filter("metadata->>conversation_id", "eq", conversationId)
+    }
+
+    const { data: updated, error: updateErr } = await updateQuery
+      .select("id, rowIndex, businessEmail, websiteUrl, emailStatus, hasReplied, metadata")
       .single()
 
     if (updateErr) {
@@ -173,7 +252,9 @@ serve(async (req) => {
           rowIndex: updated!.rowIndex,
           businessEmail: updated!.businessEmail ?? null,
           websiteUrl: updated!.websiteUrl ?? null,
-          emailStatus: updated!.emailStatus ?? "Pending",
+          emailStatus: updated!.emailStatus as string,
+          hasReplied: (updated!.hasReplied as "YES" | "NO" | null) ?? null,
+          metadata: (updated as Record<string, unknown>)?.metadata,
         },
       },
       200

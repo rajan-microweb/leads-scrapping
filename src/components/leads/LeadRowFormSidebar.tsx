@@ -22,6 +22,7 @@ export type LeadRow = {
   businessEmail: string | null
   websiteUrl: string | null
   emailStatus?: string | null
+  hasReplied?: "YES" | "NO" | null
 }
 
 type LeadRowFormSidebarProps = {

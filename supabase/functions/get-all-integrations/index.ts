@@ -97,7 +97,9 @@ serve(async (req) => {
 
     let query = supabase
       .from("integrations")
-      .select("id, userId, platformName, isConnected, metadata, createdAt, updatedAt, credentials")
+      .select(
+        "id, userId, platformName, isConnected, metadata, graphSubscription, createdAt, updatedAt, credentials"
+      )
       .order("createdAt", { ascending: false })
 
     if (filters.platform) {
@@ -123,6 +125,7 @@ serve(async (req) => {
       platformName: row.platformName,
       isConnected: row.isConnected,
       metadata: row.metadata ?? null,
+      graphSubscription: row.graphSubscription ?? null,
       credentials: row.credentials ?? null,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,

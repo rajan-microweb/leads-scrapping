@@ -19,7 +19,8 @@ Authorization: Bearer <STORE_INTEGRATION_SECRET | N8N_SECRET | SUPABASE_ANON_KEY
   "userId": "user-id-from-oauth-state",
   "platformName": "outlook",
   "credentials": { ... },
-  "metadata": { "email": "...", "name": "...", "displayName": "...", "accountId": "...", "account": "..." }
+  "metadata": { "email": "...", "name": "...", "displayName": "...", "accountId": "...", "account": "..." },
+  "graphSubscription": { "id": "...", "resource": "...", "expirationDateTime": "...", ... }
 }
 ```
 
@@ -28,6 +29,7 @@ Authorization: Bearer <STORE_INTEGRATION_SECRET | N8N_SECRET | SUPABASE_ANON_KEY
 - `platformName` (required): e.g. `"outlook"`. Stored in lowercase.
 - `credentials` (required): Object with tokens/keys (e.g. `access_token`, `refresh_token`, or `clientId`/`clientSecret`/`tenantId` for app credentials). Stored as-is in the `integrations.credentials` JSONB column.
 - `metadata` (optional): Non-secret, display-only data. Stored in `integrations.metadata` and shown in the Integrations page “Connected account” details.
+- `graphSubscription` (optional): Microsoft Graph subscription object (e.g. `id`, `resource`, `expirationDateTime`, etc.). Stored in `integrations.graphSubscription` JSONB column.
 
 ## Metadata for Integrations Page Details
 

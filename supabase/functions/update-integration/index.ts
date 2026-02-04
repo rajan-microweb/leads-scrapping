@@ -125,9 +125,28 @@ serve(async (req) => {
       payload.isConnected = body.isConnected
     }
 
+    if (body.graphSubscription !== undefined) {
+      const graphSubscription = body.graphSubscription
+      if (
+        graphSubscription === null ||
+        typeof graphSubscription !== "object" ||
+        Array.isArray(graphSubscription)
+      ) {
+        return jsonResponse(
+          { success: false, error: "graphSubscription must be an object when provided" },
+          400
+        )
+      }
+      payload.graphSubscription = graphSubscription
+    }
+
     if (Object.keys(payload).length === 0) {
       return jsonResponse(
-        { success: false, error: "At least one of credentials, metadata, or isConnected is required" },
+        {
+          success: false,
+          error:
+            "At least one of credentials, metadata, isConnected, or graphSubscription is required",
+        },
         400
       )
     }

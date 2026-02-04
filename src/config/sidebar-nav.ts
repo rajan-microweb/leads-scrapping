@@ -29,13 +29,13 @@ const sidebarNavGroups: SidebarNavGroup[] = [
     items: [
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
       { href: "/profile", label: "Profile", icon: User },
+      { href: "/integrations", label: "Integrations", icon: Plug },
     ],
   },
   {
     label: "Work",
     items: [
       { href: "/leads", label: "Leads", icon: FileText },
-      { href: "/integrations", label: "Integrations", icon: Plug },
       { href: "/signatures", label: "Signatures", icon: PenLine },
     ],
   },

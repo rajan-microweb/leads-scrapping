@@ -52,6 +52,10 @@ import {
   MAPPABLE_IMPORT_FIELDS,
   suggestMapping,
 } from "@/config/lead-import"
+import {
+  REJECT_REASON_LABELS,
+  type RejectReason,
+} from "@/lib/lead-import-filters"
 
 type LeadSheet = {
   id: string
@@ -181,6 +185,14 @@ export default function LeadsPage() {
   const [filterSignature, setFilterSignature] = useState<string | null>(null)
   const [filterType, setFilterType] = useState<string | null>(null)
   const [sheetNameInput, setSheetNameInput] = useState("")
+  const [importSummary, setImportSummary] = useState<{
+    totalRows: number
+    rowCount: number
+    rejected: number
+    rejectedByReason: Record<RejectReason, number>
+    redirectToId?: string
+  } | null>(null)
+  const [importSummaryDialogOpen, setImportSummaryDialogOpen] = useState(false)
 
   const pageSize = 10
 
@@ -707,6 +719,9 @@ export default function LeadsPage() {
                     id: string
                     sheetName?: string
                     rowCount: number
+                    totalRows: number
+                    rejected: number
+                    rejectedByReason: Record<RejectReason, number>
                   }
 
                   await loadLeads()
@@ -725,9 +740,14 @@ export default function LeadsPage() {
                   setSheetNameInput("")
                   setCreateLeadsDialogOpen(false)
 
-                  if (importOption === "new") {
-                    router.push(`/leads/${importData.id}`)
-                  }
+                  setImportSummary({
+                    totalRows: importData.totalRows,
+                    rowCount: importData.rowCount,
+                    rejected: importData.rejected,
+                    rejectedByReason: importData.rejectedByReason,
+                    ...(importOption === "new" ? { redirectToId: importData.id } : {}),
+                  })
+                  setImportSummaryDialogOpen(true)
                 } catch (err) {
                   setUploadError(
                     err instanceof Error
@@ -1049,6 +1069,69 @@ export default function LeadsPage() {
             </form>
           </DialogContent>
         </Dialog>
+
+      {/* Import Summary Dialog */}
+      <Dialog
+        open={importSummaryDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            const redirectToId = importSummary?.redirectToId
+            setImportSummaryDialogOpen(false)
+            setImportSummary(null)
+            if (redirectToId) {
+              router.push(`/leads/${redirectToId}`)
+            }
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Import complete</DialogTitle>
+            <DialogDescription asChild>
+              <div className="space-y-2 pt-1">
+                {importSummary && (
+                  <>
+                    <p>
+                      Total rows in file: <strong>{importSummary.totalRows}</strong>.
+                      Imported: <strong>{importSummary.rowCount}</strong>.
+                    </p>
+                    {importSummary.rejected > 0 && (
+                      <>
+                        <p className="text-muted-foreground">
+                          The following rows were not imported:
+                        </p>
+                        <ul className="list-inside list-disc space-y-1 text-sm">
+                          {(Object.entries(importSummary.rejectedByReason) as [RejectReason, number][])
+                            .filter(([, count]) => count > 0)
+                            .map(([reason, count]) => (
+                              <li key={reason}>
+                                {REJECT_REASON_LABELS[reason]}: {count}
+                              </li>
+                            ))}
+                        </ul>
+                      </>
+                    )}
+                  </>
+                )}
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              onClick={() => {
+                const redirectToId = importSummary?.redirectToId
+                setImportSummaryDialogOpen(false)
+                setImportSummary(null)
+                if (redirectToId) {
+                  router.push(`/leads/${redirectToId}`)
+                }
+              }}
+            >
+              Done
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <div className="grid gap-3 sm:grid-cols-3">
         <Card className="border-dashed">

@@ -12,6 +12,7 @@ interface RequestBody {
   platformName?: string
   credentials?: unknown
   metadata?: unknown
+  graphSubscription?: unknown
 }
 
 function jsonResponse(
@@ -129,6 +130,18 @@ serve(async (req) => {
       )
     }
 
+    if (
+      body.graphSubscription !== undefined &&
+      (body.graphSubscription === null ||
+        typeof body.graphSubscription !== "object" ||
+        Array.isArray(body.graphSubscription))
+    ) {
+      return jsonResponse(
+        { success: false, error: "graphSubscription must be an object when provided" },
+        400
+      )
+    }
+
     const supabase = createClient(supabaseUrl, supabaseServiceKey, {
       auth: { autoRefreshToken: false, persistSession: false },
     })
@@ -165,6 +178,14 @@ serve(async (req) => {
       !Array.isArray(body.metadata)
     ) {
       updatePayload.metadata = body.metadata
+    }
+    if (
+      body.graphSubscription !== undefined &&
+      typeof body.graphSubscription === "object" &&
+      body.graphSubscription !== null &&
+      !Array.isArray(body.graphSubscription)
+    ) {
+      updatePayload.graphSubscription = body.graphSubscription
     }
 
     if (existing) {
@@ -208,6 +229,14 @@ serve(async (req) => {
       !Array.isArray(body.metadata)
     ) {
       insertPayload.metadata = body.metadata
+    }
+    if (
+      body.graphSubscription !== undefined &&
+      typeof body.graphSubscription === "object" &&
+      body.graphSubscription !== null &&
+      !Array.isArray(body.graphSubscription)
+    ) {
+      insertPayload.graphSubscription = body.graphSubscription
     }
 
     const { data: inserted, error: insertError } = await supabase

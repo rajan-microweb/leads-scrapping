@@ -428,6 +428,28 @@ export default function LeadDetailPage() {
     })
   }
 
+  const renderHasReplied = (value: LeadRow["hasReplied"]) => {
+    if (value === "YES") {
+      return (
+        <span className="inline-flex justify-center items-center gap-1.5 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700 ring-1 ring-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-300 dark:ring-emerald-900/60">
+          YES
+        </span>
+      )
+    }
+    if (value === "NO") {
+      return (
+        <span className="inline-flex justify-center items-center gap-1.5 rounded-full bg-rose-50 px-2 py-0.5 text-xs font-medium text-rose-700 ring-1 ring-rose-100 dark:bg-rose-900/30 dark:text-rose-300 dark:ring-rose-900/60">
+          NO
+        </span>
+      )
+    }
+    return (
+      <span className="inline-flex justify-center items-center gap-1.5 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground ring-1 ring-border">
+        —
+      </span>
+    )
+  }
+
   return (
     <PageShell
       title={leadSheet.sheetName}
@@ -640,7 +662,7 @@ export default function LeadDetailPage() {
                       <Table>
                         <TableHeader>
                           <TableRow>
-                            <TableHead className="w-10">
+                            <TableHead className="w-4">
                               <Checkbox
                                 checked={allOnPageSelected}
                                 onCheckedChange={(v) =>
@@ -649,16 +671,19 @@ export default function LeadDetailPage() {
                                 aria-label="Select all rows on this page"
                               />
                             </TableHead>
-                            {LEAD_ROW_TABLE_COLUMNS.map((col) => (
-                              <TableHead
-                                key={col.key}
-                                className={col.key === "rowIndex" ? "w-12" : undefined}
-                              >
-                                {col.key === "rowIndex" ? "%" : col.label}
-                              </TableHead>
-                            ))}
-                            <TableHead className="w-[120px]">Email Status</TableHead>
-                            <TableHead className="w-[100px] text-right">Actions</TableHead>
+                            {LEAD_ROW_TABLE_COLUMNS.filter((col) => col.key !== "hasReplied").map(
+                              (col) => (
+                                <TableHead
+                                  key={col.key}
+                                  className={col.key === "rowIndex" ? "w-4" : "w-1/5"}
+                                >
+                                  {col.key === "rowIndex" ? "%" : col.label}
+                                </TableHead>
+                              )
+                            )}
+                            <TableHead className="w-1/5">Email Status</TableHead>
+                            <TableHead className="w-1/5">Has replied</TableHead>
+                            <TableHead className="w-1 text-center">Actions</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -673,27 +698,33 @@ export default function LeadDetailPage() {
                                   aria-label={`Select row ${row.rowIndex + 1}`}
                                 />
                               </TableCell>
-                              {LEAD_ROW_TABLE_COLUMNS.map((col) => {
-                                const value = row[col.key as keyof LeadRow]
-                                const display =
-                                  col.key === "rowIndex" && typeof value === "number"
-                                    ? value + 1
-                                    : value ?? "—"
-                                const str = typeof display === "string" ? display : String(display)
-                                return (
-                                  <TableCell
-                                    key={col.key}
-                                    className={
-                                      col.key === "rowIndex"
-                                        ? "text-muted-foreground"
-                                        : "max-w-[200px] truncate"
-                                    }
-                                    title={typeof display === "string" ? display : undefined}
-                                  >
-                                    {str}
-                                  </TableCell>
-                                )
-                              })}
+                              {LEAD_ROW_TABLE_COLUMNS.filter((col) => col.key !== "hasReplied").map(
+                                (col) => {
+                                  const value = row[col.key as keyof LeadRow]
+                                  if (col.key === "rowIndex" && typeof value === "number") {
+                                    return (
+                                      <TableCell
+                                        key={col.key}
+                                        className="w-4 text-muted-foreground"
+                                      >
+                                        {value + 1}
+                                      </TableCell>
+                                    )
+                                  }
+                                  const display = value ?? "—"
+                                  const str =
+                                    typeof display === "string" ? display : String(display)
+                                  return (
+                                    <TableCell
+                                      key={col.key}
+                                      className="w-1/5 truncate"
+                                      title={typeof display === "string" ? display : undefined}
+                                    >
+                                      {str}
+                                    </TableCell>
+                                  )
+                                }
+                              )}
                               <TableCell>
                                 {(() => {
                                   const status = row.emailStatus ?? "Pending"
@@ -721,34 +752,45 @@ export default function LeadDetailPage() {
                                       </span>
                                     )
                                   }
+                                  if (status === "Not Eligible") {
+                                    return (
+                                      <span className="inline-flex items-center gap-1.5 text-destructive">
+                                        <XCircle className="h-4 w-4 shrink-0" aria-hidden />
+                                        Not Eligible
+                                      </span>
+                                    )
+                                  }
                                   return (
-                                    <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+                                    <span className="inline-flex items-center gap-1.5 text-gray-500 dark:text-gray-400">
                                       Pending
                                     </span>
                                   )
                                 })()}
                               </TableCell>
-                              <TableCell className="text-right">
-                                <div className="flex items-center justify-end gap-1">
+                              <TableCell>
+                                {renderHasReplied(row.hasReplied ?? null)}
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <div className="flex items-center justify-center gap-2">
                                   <Button
                                     type="button"
                                     variant="ghost"
                                     size="icon"
-                                    className="h-8 w-8"
+                                    className="h-10 w-10"
                                     onClick={() => handleEditClick(row)}
                                     aria-label={`Edit row ${row.rowIndex + 1}`}
                                   >
-                                    <Pencil className="h-4 w-4" aria-hidden />
+                                    <Pencil className="h-5 w-5" aria-hidden />
                                   </Button>
                                   <Button
                                     type="button"
                                     variant="ghost"
                                     size="icon"
-                                    className="h-8 w-8 text-destructive hover:text-destructive"
+                                  className="h-10 w-10 text-destructive hover:text-destructive"
                                     onClick={() => handleDeleteClick(row.id)}
                                     aria-label={`Delete row ${row.rowIndex + 1}`}
                                   >
-                                    <Trash2 className="h-4 w-4" aria-hidden />
+                                    <Trash2 className="h-5 w-5" aria-hidden />
                                   </Button>
                                 </div>
                               </TableCell>

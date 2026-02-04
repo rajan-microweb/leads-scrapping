@@ -6,11 +6,9 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, content-type",
 }
 
-const DEFAULT_LIMIT = 100
-const MAX_LIMIT = 1000
-
 interface LeadRow {
   id: string
+  userId: string
   leadSheetId: string
   sheetName: string
   rowIndex: number
@@ -37,11 +35,53 @@ function jsonResponse(
   })
 }
 
-function parseLimit(value: unknown): number {
-  if (value === undefined || value === null) return DEFAULT_LIMIT
-  const n = typeof value === "string" ? parseInt(value, 10) : Number(value)
-  if (!Number.isFinite(n) || n < 1) return DEFAULT_LIMIT
-  return Math.min(Math.floor(n), MAX_LIMIT)
+function normalizeHasReplied(
+  value: unknown
+): { filter: "YES" | "NO" | null; error?: string } {
+  if (value === undefined || value === null) {
+    return { filter: null }
+  }
+
+  if (typeof value !== "string") {
+    return {
+      filter: null,
+      error: "hasReplied must be a string when provided",
+    }
+  }
+
+  const normalized = value.trim().toUpperCase()
+  if (!normalized) {
+    return { filter: null }
+  }
+
+  if (normalized !== "YES" && normalized !== "NO") {
+    return {
+      filter: null,
+      error: "hasReplied must be either 'YES' or 'NO' when provided",
+    }
+  }
+
+  return { filter: normalized as "YES" | "NO" }
+}
+
+function normalizeEmailStatus(value: unknown): { filter: string | null; error?: string } {
+  if (value === undefined || value === null) {
+    return { filter: null }
+  }
+
+  if (typeof value !== "string") {
+    return {
+      filter: null,
+      error: "emailStatus must be a string when provided",
+    }
+  }
+
+  const normalized = value.trim()
+  if (!normalized) {
+    return { filter: null }
+  }
+
+  return { filter: normalized }
 }
 
 serve(async (req) => {
@@ -87,16 +127,13 @@ serve(async (req) => {
       )
     }
 
-    let leadSheetId = ""
-    let limit = DEFAULT_LIMIT
-    let emailStatus: string | null = null
+    let hasRepliedRaw: unknown = null
+    let emailStatusRaw: unknown = null
 
     if (req.method === "GET") {
       const url = new URL(req.url)
-      leadSheetId = (url.searchParams.get("leadSheetId") ?? "").trim()
-      limit = parseLimit(url.searchParams.get("limit"))
-      const es = url.searchParams.get("emailStatus")
-      emailStatus = typeof es === "string" && es.trim() !== "" ? es.trim() : null
+      hasRepliedRaw = url.searchParams.get("hasReplied")
+      emailStatusRaw = url.searchParams.get("emailStatus")
     } else {
       let body: Record<string, unknown>
       try {
@@ -108,17 +145,21 @@ serve(async (req) => {
       } catch {
         return jsonResponse({ success: false, error: "Invalid JSON in request body" }, 400)
       }
-      leadSheetId = typeof body.leadSheetId === "string" ? body.leadSheetId.trim() : ""
-      limit = parseLimit(body.limit)
-      const es = body.emailStatus
-      emailStatus = typeof es === "string" && es.trim() !== "" ? es.trim() : null
+      hasRepliedRaw = body.hasReplied
+      emailStatusRaw = body.emailStatus
     }
 
-    if (!leadSheetId) {
-      return jsonResponse(
-        { success: false, error: "leadSheetId is required and must be a non-empty string" },
-        400
-      )
+    const { filter: hasRepliedFilter, error: filterError } = normalizeHasReplied(hasRepliedRaw)
+
+    if (filterError) {
+      return jsonResponse({ success: false, error: filterError }, 400)
+    }
+
+    const { filter: emailStatusFilter, error: emailStatusError } =
+      normalizeEmailStatus(emailStatusRaw)
+
+    if (emailStatusError) {
+      return jsonResponse({ success: false, error: emailStatusError }, 400)
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey, {
@@ -128,28 +169,33 @@ serve(async (req) => {
     let query = supabase
       .from("LeadsData")
       .select(
-        "id, leadSheetId, sheetName, rowIndex, businessEmail, websiteUrl, emailStatus, hasReplied, metadata"
+        "id, userId, leadSheetId, sheetName, rowIndex, businessEmail, websiteUrl, emailStatus, hasReplied, metadata"
       )
-      .eq("leadSheetId", leadSheetId)
       .order("rowIndex", { ascending: true })
-      .limit(limit)
 
-    if (emailStatus !== null) {
-      query = query.eq("emailStatus", emailStatus)
+    if (hasRepliedFilter !== null) {
+      query = query.eq("hasReplied", hasRepliedFilter)
+    }
+
+    if (emailStatusFilter !== null) {
+      query = query.eq("emailStatus", emailStatusFilter)
     }
 
     const { data: rows, error } = await query
 
     if (error) {
-      console.error("get-leads query error:", error)
+      console.error("get-all-leads query error:", error)
       return jsonResponse({ success: false, error: "Failed to fetch leads" }, 500)
     }
 
     const list = Array.isArray(rows) ? rows : []
+
     const leads: LeadRow[] = list.map((row: Record<string, unknown>) => {
       const hasReplied = (row.hasReplied as "YES" | "NO" | null) ?? null
+
       return {
         id: row.id as string,
+        userId: row.userId as string,
         leadSheetId: row.leadSheetId as string,
         sheetName: (row.sheetName as string) ?? "",
         rowIndex: Number(row.rowIndex) ?? 0,
@@ -162,14 +208,19 @@ serve(async (req) => {
     })
 
     return jsonResponse(
-      { success: true, leads, count: leads.length },
+      {
+        success: true,
+        leads,
+        count: leads.length,
+      },
       200
     )
   } catch (err) {
-    console.error("get-leads error:", err)
+    console.error("get-all-leads error:", err)
     return jsonResponse(
       { success: false, error: err instanceof Error ? err.message : "Internal server error" },
       500
     )
   }
 })
+
