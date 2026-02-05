@@ -46,6 +46,8 @@ export function LeadRowFormSidebar({
     rowIndex: "",
     businessEmail: "",
     websiteUrl: "",
+    emailStatus: "",
+    hasReplied: "",
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -60,12 +62,16 @@ export function LeadRowFormSidebar({
           rowIndex: String(row.rowIndex),
           businessEmail: row.businessEmail ?? "",
           websiteUrl: row.websiteUrl ?? "",
+          emailStatus: row.emailStatus ?? "",
+          hasReplied: row.hasReplied ?? "",
         })
       } else {
         setFormValues({
           rowIndex: "",
           businessEmail: "",
           websiteUrl: "",
+          emailStatus: "",
+          hasReplied: "",
         })
       }
     }

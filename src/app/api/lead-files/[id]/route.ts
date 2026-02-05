@@ -2,6 +2,9 @@ import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { supabaseAdmin } from "@/lib/supabase-server"
 
+/**
+ * GET /api/lead-files/[id] – get a single lead sheet by id
+ */
 export async function GET(
   _request: Request,
   { params }: { params: { id: string } }
@@ -13,9 +16,12 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const id = params?.id?.trim()
-    if (!id) {
-      return NextResponse.json({ error: "Lead sheet id is required" }, { status: 400 })
+    const trimmedId = params?.id?.trim()
+    if (!trimmedId) {
+      return NextResponse.json(
+        { error: "Lead sheet id is required" },
+        { status: 400 }
+      )
     }
 
     const { data: leadSheet, error } = await supabaseAdmin
@@ -27,7 +33,7 @@ export async function GET(
         sourceFileExtension,
         signature:signatures(name)
       `)
-      .eq("id", id)
+      .eq("id", trimmedId)
       .eq("userId", session.user.id)
       .single()
 
@@ -57,7 +63,7 @@ export async function GET(
       { status: 200 }
     )
   } catch (error) {
-    console.error("leads [id] GET error:", error)
+    console.error("lead-files/[id] GET error:", error)
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

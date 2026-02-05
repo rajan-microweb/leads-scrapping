@@ -68,7 +68,7 @@ export function RecentActivityList({
           <div className="space-y-2 py-2">
             <p className="type-body text-muted-foreground">No recent activity</p>
             <p className="type-caption">
-              Upload a lead file or add a signature to see activity here.
+              Upload a lead sheet or add a signature to see activity here.
             </p>
           </div>
         ) : (

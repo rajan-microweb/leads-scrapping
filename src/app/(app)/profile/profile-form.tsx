@@ -476,17 +476,15 @@ export function ProfileForm({
         </CardContent>
       </Card>
 
-      {/* Section 1: Website & Company Information */}
+      {/* Section 1: Website */}
       <Card>
         <CardHeader>
-          <CardTitle className="type-card-title">Website &amp; Company Information</CardTitle>
+          <CardTitle className="type-card-title">Website</CardTitle>
           <CardDescription>
-            Fill in the website details below. You can auto-fill company information by clicking the{" "}
-            <span className="font-medium">Generate</span> button.
+            Connect your primary website so we can auto-generate company intelligence for you.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* Website fields */}
           <div className="space-y-2">
             <Label htmlFor="websiteUrl">Website URL</Label>
             <div className="flex gap-2">
@@ -498,7 +496,12 @@ export function ProfileForm({
                 disabled={isGenerating || isSaving}
                 className="flex-1"
               />
-              <Button type="button" onClick={handleGenerate} disabled={isGenerating || isSaving} className="gap-2">
+              <Button
+                type="button"
+                onClick={handleGenerate}
+                disabled={isGenerating || isSaving}
+                className="gap-2"
+              >
                 {isGenerating ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
@@ -510,11 +513,23 @@ export function ProfileForm({
               </Button>
             </div>
             {errors.websiteUrl && (
-              <p className="text-sm text-destructive" role="alert">{errors.websiteUrl.message as string}</p>
+              <p className="text-sm text-destructive" role="alert">
+                {errors.websiteUrl.message as string}
+              </p>
             )}
           </div>
+        </CardContent>
+      </Card>
 
-          {/* Company fields */}
+      {/* Section 2: Company Intelligence */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="type-card-title">Company intelligence</CardTitle>
+          <CardDescription>
+            Review and refine the company details that power lead research and outreach.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="companyName">Company Name</Label>
@@ -522,7 +537,11 @@ export function ProfileForm({
             </div>
             <div className="space-y-2">
               <Label htmlFor="companyType">Company Type</Label>
-              <Input id="companyType" {...register("companyType")} placeholder="e.g., Digital Agency" />
+              <Input
+                id="companyType"
+                {...register("companyType")}
+                placeholder="e.g., Digital Agency"
+              />
             </div>
 
             <div className="space-y-2">

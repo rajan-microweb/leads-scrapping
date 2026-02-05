@@ -75,6 +75,8 @@ type Signature = {
 
 const ALLOWED_EXTENSIONS = [".xlsx", ".xls", ".csv"]
 const CREATE_NEW_SIGNATURE_VALUE = "__create_new_signature__"
+/** Sentinel for "No signature" in signature Select (Radix Select disallows empty string value). */
+const NO_SIGNATURE_VALUE = "__no_signature__"
 /** Sentinel for "Don't map" in column mapping Select (Radix Select disallows empty string value). */
 const DONT_MAP_VALUE = "__dont_map__"
 /** Prefix for empty column headers in Select (Radix disallows empty string value). */
@@ -200,7 +202,7 @@ export default function LeadsPage() {
     try {
       setIsLoading(true)
       setError(null)
-      const res = await fetch("/api/leads")
+      const res = await fetch("/api/lead-files")
       const raw = await res.json().catch(() => null)
       if (!res.ok) {
         const message =
@@ -350,7 +352,7 @@ export default function LeadsPage() {
     if (!deletingLeadSheetIds || deletingLeadSheetIds.length === 0) return
     try {
       setIsDeleting(true)
-      const res = await fetch("/api/leads", {
+      const res = await fetch("/api/lead-files", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ids: deletingLeadSheetIds }),
@@ -529,7 +531,7 @@ export default function LeadsPage() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete lead file(s)</AlertDialogTitle>
+            <AlertDialogTitle>Delete lead sheet(s)</AlertDialogTitle>
             <AlertDialogDescription>
               {deletingLeadSheetIds?.length === 1
                 ? "Are you sure you want to delete this lead sheet? This cannot be undone."
@@ -745,9 +747,12 @@ export default function LeadsPage() {
                     rowCount: importData.rowCount,
                     rejected: importData.rejected,
                     rejectedByReason: importData.rejectedByReason,
-                    ...(importOption === "new" ? { redirectToId: importData.id } : {}),
+                    redirectToId: importData.id,
                   })
                   setImportSummaryDialogOpen(true)
+                  if (importOption === "new") {
+                    router.push(`/leads/${importData.id}`)
+                  }
                 } catch (err) {
                   setUploadError(
                     err instanceof Error
@@ -768,41 +773,56 @@ export default function LeadsPage() {
                     >
                       Select signature
                     </Label>
-                    <select
-                      id="signature-select"
-                      name="signature"
-                      className="block w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm outline-none ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                      value={selectedSignatureId}
-                      onChange={(event) => {
-                        const value = event.currentTarget.value
+                    <Select
+                      value={selectedSignatureId || NO_SIGNATURE_VALUE}
+                      onValueChange={(value) => {
                         if (value === CREATE_NEW_SIGNATURE_VALUE) {
                           handleCreateSignature({
                             fileName: selectedFile?.name ?? undefined,
                           })
                           return
                         }
-                        setSelectedSignatureId(value)
+                        setSelectedSignatureId(value === NO_SIGNATURE_VALUE ? "" : value)
                       }}
                       disabled={signaturesLoading || !!signaturesError}
                     >
-                      {signaturesLoading ? (
-                        <option value="">Loading signatures...</option>
-                      ) : signaturesError ? (
-                        <option value="">Unable to load signatures</option>
-                      ) : (
-                        <>
-                          <option value="">No signature</option>
-                          {signatures.map((signature) => (
-                            <option key={signature.id} value={signature.id}>
-                              {signature.name}
-                            </option>
-                          ))}
-                          <option value={CREATE_NEW_SIGNATURE_VALUE}>
-                            Create New Signature
-                          </option>
-                        </>
-                      )}
-                    </select>
+                      <SelectTrigger id="signature-select" className="w-full">
+                        <SelectValue
+                          placeholder={
+                            signaturesLoading
+                              ? "Loading signatures..."
+                              : signaturesError
+                                ? "Unable to load signatures"
+                                : "No signature"
+                          }
+                        />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {signaturesLoading ? (
+                          <SelectItem value={NO_SIGNATURE_VALUE} disabled>
+                            Loading signatures...
+                          </SelectItem>
+                        ) : signaturesError ? (
+                          <SelectItem value={NO_SIGNATURE_VALUE} disabled>
+                            Unable to load signatures
+                          </SelectItem>
+                        ) : (
+                          <>
+                            <SelectItem value={NO_SIGNATURE_VALUE}>
+                              No signature
+                            </SelectItem>
+                            {signatures.map((signature) => (
+                              <SelectItem key={signature.id} value={signature.id}>
+                                {signature.name}
+                              </SelectItem>
+                            ))}
+                            <SelectItem value={CREATE_NEW_SIGNATURE_VALUE}>
+                              Create New Signature
+                            </SelectItem>
+                          </>
+                        )}
+                      </SelectContent>
+                    </Select>
                     <p className="text-xs text-muted-foreground">
                       Optional. Can be managed from the Signatures page.
                     </p>
@@ -810,15 +830,15 @@ export default function LeadsPage() {
 
                   <div className="space-y-2">
                     <label
-                      htmlFor="lead-file"
+                      htmlFor="lead-sheet-file"
                       className="text-sm font-medium text-foreground"
                     >
                       Upload file
                     </label>
                     <input
                       key={fileInputKey}
-                      id="lead-file"
-                      name="lead-file"
+                      id="lead-sheet-file"
+                      name="lead-sheet-file"
                       type="file"
                       accept=".xlsx,.xls,.csv"
                       className="block w-full text-sm text-muted-foreground file:mr-4 file:rounded-md file:border-0 file:bg-primary file:px-4 file:py-2 file:text-sm file:font-medium file:text-primary-foreground hover:file:bg-primary/90"
@@ -1155,10 +1175,14 @@ export default function LeadsPage() {
           <CardContent>
             <div className="text-sm font-medium">
               {leadSheets.length === 0
-                ? "No sheets yet"
+                ? "—"
                 : new Date(leadSheets[0].uploadedAt).toLocaleString()}
             </div>
-            <p className="type-caption mt-1">Most recent sheet you&apos;ve added</p>
+            <p className="type-caption mt-1">
+              {leadSheets.length === 0
+                ? "Upload a sheet to get started"
+                : "Most recent sheet you&apos;ve added"}
+            </p>
           </CardContent>
         </Card>
 

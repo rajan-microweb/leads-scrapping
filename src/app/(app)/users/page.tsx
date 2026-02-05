@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation"
 import { auth } from "@/lib/auth"
-import { supabaseAdmin } from "@/lib/supabase-server"
 import { UsersTable } from "./users-table"
 
 export const dynamic = "force-dynamic"
@@ -17,23 +16,6 @@ export default async function UsersPage() {
     redirect("/dashboard")
   }
 
-  const { data: users } = await supabaseAdmin
-    .from('User')
-    .select('id, name, email, role, "createdAt", "updatedAt"')
-    .order('createdAt', { ascending: false })
-
-  return (
-    <UsersTable
-      currentUserId={session.user.id}
-      initialUsers={(users || []).map((u) => ({
-        id: u.id,
-        name: u.name,
-        email: u.email,
-        role: u.role as "ADMIN" | "CLIENT",
-        createdAt: new Date(u.createdAt).toISOString(),
-        updatedAt: u.updatedAt ? new Date(u.updatedAt).toISOString() : undefined,
-      }))}
-    />
-  )
+  return <UsersTable currentUserId={session.user.id} />
 }
 

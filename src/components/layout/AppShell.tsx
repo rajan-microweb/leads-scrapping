@@ -129,7 +129,7 @@ export function AppShell({ session, children }: AppShellProps) {
             </div>
           </header>
 
-          <main className="flex-1 overflow-y-auto min-w-0">
+          <main id="main-content" className="flex-1 overflow-y-auto min-w-0" tabIndex={-1}>
             <div className="h-full w-full min-w-0 p-4 md:p-6 lg:p-8">
               <Suspense fallback={<AppLoadingFallback />}>
                 {children}

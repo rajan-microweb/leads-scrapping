@@ -20,6 +20,17 @@ export default function IntegrationsPage() {
             platformName="outlook"
             description="Sync contacts and outreach with your Microsoft Outlook inbox and calendar."
           />
+          <div className="flex min-h-[120px] flex-col justify-between rounded-lg border border-dashed border-muted-foreground/40 bg-muted/20 p-4 text-sm">
+            <div className="space-y-1">
+              <p className="font-medium text-foreground">More integrations coming soon</p>
+              <p className="text-muted-foreground">
+                Gmail, Calendar, and additional CRMs will appear here as they are added.
+              </p>
+            </div>
+            <p className="type-caption text-muted-foreground">
+              Need a specific integration? Reach out to your implementation contact.
+            </p>
+          </div>
         </div>
       </section>
     </PageShell>

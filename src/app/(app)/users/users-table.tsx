@@ -1,12 +1,13 @@
 "use client"
 
-import { useState, useMemo, useEffect } from "react"
-import { Users, Loader2, Search, ArrowUp, ArrowDown } from "lucide-react"
+import { useState, useMemo, useEffect, useCallback } from "react"
+import { Users, Loader2, Search, ArrowUp, ArrowDown, Plus } from "lucide-react"
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import {
   Select,
   SelectContent,
@@ -90,11 +91,12 @@ function sortUsers(
 
 type UsersTableProps = {
   currentUserId: string
-  initialUsers: UserRow[]
 }
 
-export function UsersTable({ currentUserId, initialUsers }: UsersTableProps) {
-  const [users, setUsers] = useState<UserRow[]>(initialUsers)
+export function UsersTable({ currentUserId }: UsersTableProps) {
+  const [users, setUsers] = useState<UserRow[]>([])
+  const [totalItems, setTotalItems] = useState(0)
+  const [isLoadingList, setIsLoadingList] = useState(true)
   const [isSavingId, setIsSavingId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
@@ -103,37 +105,62 @@ export function UsersTable({ currentUserId, initialUsers }: UsersTableProps) {
   const [sortOrder, setSortOrder] = useState<SortOrder>("desc")
   const [currentPage, setCurrentPage] = useState(1)
   const [manageUser, setManageUser] = useState<UserRow | null>(null)
+  const [inviteOpen, setInviteOpen] = useState(false)
+  const [inviteName, setInviteName] = useState("")
+  const [inviteEmail, setInviteEmail] = useState("")
+  const [inviteRole, setInviteRole] = useState<Role>("CLIENT")
+  const [inviteError, setInviteError] = useState<string | null>(null)
+  const [isInviting, setIsInviting] = useState(false)
 
-  const filteredUsers = useMemo(
-    () => filterUsers(users, searchQuery, roleFilter === "all" ? null : roleFilter),
-    [users, searchQuery, roleFilter]
-  )
-  const sortedUsers = useMemo(
-    () => sortUsers(filteredUsers, sortBy, sortOrder),
-    [filteredUsers, sortBy, sortOrder]
-  )
-  const totalPages = Math.max(
-    1,
-    Math.ceil(sortedUsers.length / PAGE_SIZE)
-  )
-  const paginatedUsers = useMemo(
-    () =>
-      sortedUsers.slice(
-        (currentPage - 1) * PAGE_SIZE,
-        currentPage * PAGE_SIZE
-      ),
-    [sortedUsers, currentPage]
-  )
+  const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE))
 
+  const loadUsers = useCallback(async () => {
+    try {
+      setIsLoadingList(true)
+      setError(null)
+
+      const params = new URLSearchParams()
+      params.set("page", String(currentPage))
+      params.set("pageSize", String(PAGE_SIZE))
+      if (searchQuery.trim()) {
+        params.set("search", searchQuery.trim())
+      }
+      if (roleFilter !== "all") {
+        params.set("role", roleFilter)
+      }
+      params.set("sortBy", sortBy)
+      params.set("sortOrder", sortOrder)
+
+      const res = await fetch(`/api/users?${params.toString()}`)
+      if (!res.ok) {
+        const data = await res.json().catch(() => null)
+        throw new Error(data?.error || "Failed to load users")
+      }
+
+      const json = (await res.json()) as {
+        users: UserRow[]
+        total: number
+      }
+
+      setUsers(json.users ?? [])
+      setTotalItems(json.total ?? json.users.length)
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Unable to load users right now."
+      )
+    } finally {
+      setIsLoadingList(false)
+    }
+  }, [currentPage, roleFilter, searchQuery, sortBy, sortOrder])
+
+  useEffect(() => {
+    loadUsers()
+  }, [loadUsers])
+
+  // Reset to first page when filters or sort change
   useEffect(() => {
     setCurrentPage(1)
   }, [searchQuery, roleFilter, sortBy, sortOrder])
-
-  useEffect(() => {
-    if (currentPage > totalPages && totalPages >= 1) {
-      setCurrentPage(totalPages)
-    }
-  }, [currentPage, totalPages])
 
   const handleSort = (column: SortBy) => {
     if (sortBy === column) {
@@ -203,10 +230,27 @@ export function UsersTable({ currentUserId, initialUsers }: UsersTableProps) {
       <Card className="border border-border/60 shadow-card">
         <CardHeader>
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <CardTitle className="type-card-title">All Users</CardTitle>
-            <span className="type-caption font-normal">
-              {users.length} {users.length === 1 ? "user" : "users"} registered
-            </span>
+            <div className="space-y-1">
+              <CardTitle className="type-card-title">All Users</CardTitle>
+              <span className="type-caption font-normal">
+                {totalItems} {totalItems === 1 ? "user" : "users"} registered
+              </span>
+            </div>
+            <Button
+              type="button"
+              className="gap-2"
+              size="sm"
+              onClick={() => {
+                setInviteError(null)
+                setInviteName("")
+                setInviteEmail("")
+                setInviteRole("CLIENT")
+                setInviteOpen(true)
+              }}
+            >
+              <Plus className="h-4 w-4" aria-hidden />
+              Add user
+            </Button>
           </div>
           <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
             <div className="relative flex-1 sm:max-w-xs">
@@ -265,13 +309,20 @@ export function UsersTable({ currentUserId, initialUsers }: UsersTableProps) {
             </div>
           )}
 
-          {users.length === 0 ? (
+          {isLoadingList ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2
+                className="h-5 w-5 animate-spin text-muted-foreground"
+                aria-hidden
+              />
+            </div>
+          ) : totalItems === 0 ? (
             <EmptyState
               icon={Users}
               title="No users found"
               description="No user accounts have been created yet."
             />
-          ) : sortedUsers.length === 0 ? (
+          ) : users.length === 0 ? (
             <EmptyState
               icon={Users}
               title="No matching users"
@@ -328,7 +379,7 @@ export function UsersTable({ currentUserId, initialUsers }: UsersTableProps) {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {paginatedUsers.map((user) => {
+                  {users.map((user) => {
                   const isCurrentUser = user.id === currentUserId
                   return (
                     <TableRow key={user.id}>
@@ -418,7 +469,7 @@ export function UsersTable({ currentUserId, initialUsers }: UsersTableProps) {
                   currentPage={currentPage}
                   totalPages={totalPages}
                   onPageChange={setCurrentPage}
-                  totalItems={sortedUsers.length}
+                  totalItems={totalItems}
                   pageSize={PAGE_SIZE}
                   itemLabel="user"
                   filterNote={
@@ -431,6 +482,113 @@ export function UsersTable({ currentUserId, initialUsers }: UsersTableProps) {
           )}
         </CardContent>
       </Card>
+
+      <Dialog
+        open={inviteOpen}
+        onOpenChange={(open) => {
+          setInviteOpen(open)
+          if (!open) {
+            setInviteError(null)
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Invite user</DialogTitle>
+            <DialogDescription>
+              Create a user and send them an email to set their password.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            className="space-y-4"
+            onSubmit={async (e) => {
+              e.preventDefault()
+              setInviteError(null)
+              setIsInviting(true)
+              try {
+                const res = await fetch("/api/users/invite", {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({
+                    name: inviteName,
+                    email: inviteEmail,
+                    role: inviteRole,
+                  }),
+                })
+
+                if (!res.ok) {
+                  const data = await res.json().catch(() => null)
+                  throw new Error(data?.error || "Failed to invite user")
+                }
+
+                // Refresh list from first page so the new user is visible
+                setCurrentPage(1)
+                await loadUsers()
+                setInviteOpen(false)
+              } catch (err) {
+                setInviteError(
+                  err instanceof Error ? err.message : "Failed to invite user"
+                )
+              } finally {
+                setIsInviting(false)
+              }
+            }}
+          >
+            <div className="space-y-2">
+              <Label htmlFor="invite-name">Name</Label>
+              <Input
+                id="invite-name"
+                value={inviteName}
+                onChange={(e) => setInviteName(e.target.value)}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="invite-email">Email</Label>
+              <Input
+                id="invite-email"
+                type="email"
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="invite-role">Role</Label>
+              <Select
+                value={inviteRole}
+                onValueChange={(v) => setInviteRole(v as Role)}
+              >
+                <SelectTrigger id="invite-role" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="CLIENT">CLIENT</SelectItem>
+                  <SelectItem value="ADMIN">ADMIN</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {inviteError && (
+              <p className="text-sm text-destructive">{inviteError}</p>
+            )}
+            <div className="flex justify-end gap-2 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setInviteOpen(false)}
+                disabled={isInviting}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isInviting}>
+                {isInviting ? "Inviting..." : "Send invite"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!manageUser} onOpenChange={(open) => !open && setManageUser(null)}>
         <DialogContent className="sm:max-w-md" aria-describedby="manage-user-description">

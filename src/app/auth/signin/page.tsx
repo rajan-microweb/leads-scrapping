@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { signIn } from "next-auth/react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -11,6 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 
 export default function SignInPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
@@ -22,19 +23,23 @@ export default function SignInPage() {
     setLoading(true)
 
     try {
+      const callbackUrl =
+        searchParams.get("callbackUrl") && searchParams.get("callbackUrl") !== ""
+          ? searchParams.get("callbackUrl")!
+          : "/dashboard"
+
       const result = await signIn("credentials", {
         email,
         password,
         redirect: false,
+        callbackUrl,
       })
 
       if (result?.error) {
         setError("Invalid email or password")
       } else {
-        // After successful login, go through the main app flow.
-        // Dashboard will redirect first-time users to the Profile page,
-        // which shows the full website + company information form layout.
-        router.push("/dashboard")
+        const target = result?.url || callbackUrl
+        router.push(target)
         router.refresh()
       }
     } catch (error) {

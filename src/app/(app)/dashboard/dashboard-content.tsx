@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic"
 import { useEffect, useState, useMemo, useCallback } from "react"
+import { usePathname } from "next/navigation"
 import {
   LayoutDashboard,
   User,
@@ -59,11 +60,20 @@ export function DashboardContent({
   userRole,
   userName,
 }: DashboardContentProps) {
+  const pathname = usePathname()
   const [leads, setLeads] = useState<LeadSheet[]>([])
   const [signatures, setSignatures] = useState<Signature[]>([])
   const [integrations, setIntegrations] = useState<Integration[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  const isCurrentPath = useCallback(
+    (href: string) => {
+      if (!pathname) return false
+      return pathname === href || pathname.startsWith(`${href}/`)
+    },
+    [pathname]
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -73,12 +83,20 @@ export function DashboardContent({
       setError(null)
       try {
         const [leadsRes, signaturesRes, integrationsRes] = await Promise.all([
-          fetch("/api/leads"),
+          fetch("/api/lead-files"),
           fetch("/api/signatures"),
           fetch("/api/integrations"),
         ])
 
         if (cancelled) return
+
+        const hadPartialError =
+          !leadsRes.ok || !signaturesRes.ok || !integrationsRes.ok
+        if (hadPartialError) {
+          setError(
+            "Some dashboard sections failed to load. Data may be incomplete."
+          )
+        }
 
         const [leadsData, sigsData, intsData] = await Promise.all([
           leadsRes.ok ? leadsRes.json() : [],
@@ -124,7 +142,7 @@ export function DashboardContent({
         item: {
           type: "lead",
           label: `Lead sheet: ${s.sheetName}`,
-          href: "/leads",
+          href: `/leads/${s.id}`,
           date: new Date(s.uploadedAt),
         },
       })
@@ -169,30 +187,49 @@ export function DashboardContent({
     setError(null)
     setLoading(true)
     Promise.all([
-      fetch("/api/leads").then((r) => (r.ok ? r.json() : [])),
-      fetch("/api/signatures").then((r) => (r.ok ? r.json() : [])),
-      fetch("/api/integrations").then((r) => (r.ok ? r.json() : [])),
+      fetch("/api/lead-files"),
+      fetch("/api/signatures"),
+      fetch("/api/integrations"),
     ])
-      .then(([leadsData, sigsData, intsData]) => {
-        setLeads(Array.isArray(leadsData) ? leadsData : [])
-        setSignatures(Array.isArray(sigsData) ? sigsData : [])
-        setIntegrations(Array.isArray(intsData) ? intsData : [])
+      .then(
+        async ([leadsRes, signaturesRes, integrationsRes]): Promise<void> => {
+          const hadPartialError =
+            !leadsRes.ok || !signaturesRes.ok || !integrationsRes.ok
+
+          if (hadPartialError) {
+            setError(
+              "Some dashboard sections failed to load. Data may be incomplete."
+            )
+          } else {
+            setError(null)
+          }
+
+          const [leadsData, sigsData, intsData] = await Promise.all([
+            leadsRes.ok ? leadsRes.json() : [],
+            signaturesRes.ok ? signaturesRes.json() : [],
+            integrationsRes.ok ? integrationsRes.json() : [],
+          ])
+
+          setLeads(Array.isArray(leadsData) ? leadsData : [])
+          setSignatures(Array.isArray(sigsData) ? sigsData : [])
+          setIntegrations(Array.isArray(intsData) ? intsData : [])
+        }
+      )
+      .catch(() => {
+        setError("Failed to load dashboard data. Please refresh.")
       })
-      .catch(() => setError("Failed to load dashboard data. Please refresh."))
       .finally(() => setLoading(false))
   }, [])
 
-  if (error) {
-    return (
-      <div className="w-full max-w-screen-2xl space-y-6 min-w-0">
-        <h1 className="type-page-title">Dashboard</h1>
-        <ErrorMessage message={error} onRetry={refetch} retryLabel="Refresh" />
-      </div>
-    )
-  }
-
   return (
     <div className="w-full max-w-screen-2xl space-y-8 min-w-0">
+      {error && (
+        <ErrorMessage
+          message={error}
+          onRetry={refetch}
+          retryLabel="Refresh"
+        />
+      )}
       <header className="space-y-1">
         <h1 className="type-page-title">
           {userName ? `Welcome back, ${userName}` : "Dashboard"}
@@ -210,10 +247,10 @@ export function DashboardContent({
           <SummaryCard
             title="Leads"
             value={loading ? null : leads.length}
-            subtitle="lead files"
+            subtitle="lead sheets"
             href="/leads"
             loading={loading}
-            emptyMessage="Upload your first lead file"
+            emptyMessage="Upload your first lead sheet"
             staggerIndex={0}
           />
           <SummaryCard
@@ -253,14 +290,39 @@ export function DashboardContent({
             href="/dashboard"
             label="Dashboard"
             icon={LayoutDashboard}
-            isCurrent
+            isCurrent={isCurrentPath("/dashboard")}
           />
-          <QuickLink href="/profile" label="Profile" icon={User} />
-          <QuickLink href="/leads" label="Leads" icon={FileSpreadsheet} />
-          <QuickLink href="/integrations" label="Integrations" icon={Plug} />
-          <QuickLink href="/signatures" label="Signatures" icon={FileSignature} />
+          <QuickLink
+            href="/profile"
+            label="Profile"
+            icon={User}
+            isCurrent={isCurrentPath("/profile")}
+          />
+          <QuickLink
+            href="/leads"
+            label="Leads"
+            icon={FileSpreadsheet}
+            isCurrent={isCurrentPath("/leads")}
+          />
+          <QuickLink
+            href="/integrations"
+            label="Integrations"
+            icon={Plug}
+            isCurrent={isCurrentPath("/integrations")}
+          />
+          <QuickLink
+            href="/signatures"
+            label="Signatures"
+            icon={FileSignature}
+            isCurrent={isCurrentPath("/signatures")}
+          />
           {userRole === "ADMIN" && (
-            <QuickLink href="/users" label="Users" icon={Users} />
+            <QuickLink
+              href="/users"
+              label="Users"
+              icon={Users}
+              isCurrent={isCurrentPath("/users")}
+            />
           )}
         </div>
       </section>

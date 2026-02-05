@@ -10,6 +10,7 @@ export type LeadRowFieldKey =
   | "rowIndex"
   | "businessEmail"
   | "websiteUrl"
+  | "emailStatus"
   | "hasReplied"
 
 export interface LeadRowFieldConfig {
@@ -52,11 +53,19 @@ export const LEAD_ROW_FIELDS: LeadRowFieldConfig[] = [
     formInputType: "url",
   },
   {
+    key: "emailStatus",
+    label: "Email status",
+    searchable: false,
+    sortable: true,
+    filterable: true,
+    formField: false,
+  },
+  {
     key: "hasReplied",
     label: "Has replied",
     searchable: false,
-    sortable: false,
-    filterable: false,
+    sortable: true,
+    filterable: true,
     formField: false,
   },
 ]

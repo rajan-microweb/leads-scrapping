@@ -16,7 +16,13 @@ async function ensureLeadSheetAccess(leadSheetId: string, userId: string) {
   return data
 }
 
-const ALLOWED_SORT_COLUMNS = ["rowIndex", "businessEmail", "websiteUrl"] as const
+const ALLOWED_SORT_COLUMNS = [
+  "rowIndex",
+  "businessEmail",
+  "websiteUrl",
+  "emailStatus",
+  "hasReplied",
+] as const
 
 function sanitizeSearch(q: string): string {
   return q
@@ -38,7 +44,7 @@ export async function GET(
     const id = context.params?.id?.trim()
     if (!id) {
       return NextResponse.json(
-        { error: "Lead file id is required" },
+        { error: "Lead sheet id is required" },
         { status: 400 }
       )
     }
@@ -68,6 +74,8 @@ export async function GET(
       url.searchParams.get("sortOrder") === "desc" ? "desc" : "asc"
     const hasEmail = url.searchParams.get("hasEmail")
     const hasUrl = url.searchParams.get("hasUrl")
+    const emailStatus = url.searchParams.get("emailStatus")
+    const hasReplied = url.searchParams.get("hasReplied")
 
     let query = supabaseAdmin
       .from("LeadsData")
@@ -95,6 +103,12 @@ export async function GET(
     }
     if (hasUrl === "false") {
       query = query.is("websiteUrl", null)
+    }
+    if (emailStatus && emailStatus !== "any") {
+      query = query.eq("emailStatus", emailStatus)
+    }
+    if (hasReplied === "YES" || hasReplied === "NO") {
+      query = query.eq("hasReplied", hasReplied)
     }
 
     const from = (page - 1) * pageSize
@@ -141,7 +155,7 @@ export async function POST(
     const id = context.params?.id?.trim()
     if (!id) {
       return NextResponse.json(
-        { error: "Lead file id is required" },
+        { error: "Lead sheet id is required" },
         { status: 400 }
       )
     }
@@ -249,7 +263,7 @@ export async function DELETE(
     const id = context.params?.id?.trim()
     if (!id) {
       return NextResponse.json(
-        { error: "Lead file id is required" },
+        { error: "Lead sheet id is required" },
         { status: 400 }
       )
     }

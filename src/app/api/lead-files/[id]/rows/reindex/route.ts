@@ -30,7 +30,7 @@ export async function POST(_request: Request, context: RouteContext) {
     const id = context.params?.id?.trim()
     if (!id) {
       return NextResponse.json(
-        { error: "Lead file id is required" },
+        { error: "Lead sheet id is required" },
         { status: 400 }
       )
     }
